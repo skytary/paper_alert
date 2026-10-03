@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PaperAlert 📚</title>
+  <style>
+    :root {
+      --c-bg: #f0f2f5;
+      --c-surface: #ffffff;
+      --c-primary: #1a3a5c;
+      --c-accent: #2563eb;
+      --c-accent-light: #dbeafe;
+      --c-text: #1e293b;
+      --c-muted: #64748b;
+      --c-border: #e2e8f0;
+      --c-s5: #16a34a; --c-s5-bg: #dcfce7;
+      --c-s4: #65a30d; --c-s4-bg: #ecfccb;
+      --c-s3: #d97706; --c-s3-bg: #fef3c7;
+      --c-s2: #ea580c; --c-s2-bg: #ffedd5;
+      --c-s1: #dc2626; --c-s1-bg: #fee2e2;
+      --radius: 10px;
+      --shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+      background: var(--c-bg);
+      color: var(--c-text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--c-primary);
+      color: #fff;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,.2);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -.3px; }
+    header h1 span { font-size: 1.4rem; margin-right: 6px; }
+    .header-right { display: flex; gap: 10px; align-items: center; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 8px 18px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: .9rem;
+      font-weight: 600;
+      transition: all .15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-sm { padding: 5px 12px; font-size: .82rem; border-radius: 5px; }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid currentColor;
+      color: var(--c-accent);
+    }
+    .btn-outline:hover { background: var(--c-accent-light); }
+    .btn-ghost {
+      background: transparent;
+      border: none;
+      color: var(--c-muted);
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: .8rem;
+    }
+    .btn-ghost:hover { background: var(--c-bg); color: var(--c-text); }
+
+    /* ── Status Banner ── */
+    #status-banner {
+      background: #1e3a5f;
+      color: #fff;
+      padding: 10px 24px;
+      font-size: .88rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #status-banner.hidden { display: none; }
+    .btn-cancel {
+      padding: 5px 14px;
+      border-radius: 5px;
+      border: none;
+      background: #dc2626;
+      color: #fff;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background .15s;
+    }
+    .btn-cancel:hover { background: #b91c1c; }
+    .btn-cancel:disabled { background: #9ca3af; cursor: not-allowed; }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2.5px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #status-progress { flex: 1; }
+    .progress-bar {
+      height: 4px;
+      background: rgba(255,255,255,.2);
+      border-radius: 2px;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #60a5fa;
+      border-radius: 2px;
+      transition: width .3s;
+    }
+
+    /* ── Stats Row ── */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      padding: 16px 24px;
+      background: var(--c-surface);
+      border-bottom: 1px solid var(--c-border);
+      align-items: stretch;
+    }
+    .stat-card {
+      width: 130px;
+      flex-shrink: 0;
+      text-align: center;
+      padding: 12px 8px;
+      background: var(--c-bg);
+      border-radius: var(--radius);
+    }
+    .stat-card .value {
+      font-size: 1.9rem;
+      font-weight: 800;
+      color: var(--c-primary);
+      line-height: 1;
+    }
+    .stat-card .label {
+      font-size: .74rem;
+      color: var(--c-muted);
+      margin-top: 5px;
+    }
+
+    /* ── Category Stats Panel ── */
+    .cat-stats-panel {
+      flex: 1;
+      background: var(--c-bg);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      min-width: 0;
+    }
+    .cat-stats-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .cat-stats-title {
+      font-size: .78rem;
+      font-weight: 700;
+      color: var(--c-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .cat-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 4px 16px;
+    }
+    .cat-stat-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: .77rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .cat-stat-row:hover { background: #ede9fe; }
+    .cat-stat-row.active-filter { background: #ede9fe; }
+    .cat-stat-name {
+      flex: 1;
+      color: var(--c-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .cat-stat-bar {
+      height: 7px;
+      background: #c4b5fd;
+      border-radius: 3px;
+      min-width: 3px;
+      flex-shrink: 0;
+      transition: width .3s;
+    }
+    .cat-stat-count {
+      color: var(--c-muted);
+      font-size: .74rem;
+      flex-shrink: 0;
+      min-width: 20px;
+      text-align: right;
+    }
+
+    /* ── Filter Bar ── */
+    .filter-bar {
+      padding: 12px 24px;
+      background: var(--c-surface);
+      border-bottom: 1px solid var(--c-border);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .filter-bar label {
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--c-muted);
+      white-space: nowrap;
+    }
+    select, input[type="text"] {
+      padding: 6px 10px;
+      border: 1.5px solid var(--c-border);
+      border-radius: 6px;
+      font-size: .85rem;
+      color: var(--c-text);
+      background: var(--c-surface);
+      outline: none;
+      transition: border-color .15s;
+    }
+    select:focus, input[type="text"]:focus { border-color: var(--c-accent); }
+    #search-input { min-width: 200px; }
+
+    .score-filter { display: flex; gap: 4px; }
+    .score-chip {
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1.5px solid var(--c-border);
+      font-size: .8rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--c-bg);
+      transition: all .15s;
+      user-select: none;
+    }
+    .score-chip.active { border-color: currentColor; }
+    .score-chip[data-min="5"] { color: var(--c-s5); }
+    .score-chip[data-min="5"].active { background: var(--c-s5-bg); }
+    .score-chip[data-min="4"] { color: var(--c-s4); }
+    .score-chip[data-min="4"].active { background: var(--c-s4-bg); }
+    .score-chip[data-min="3"] { color: var(--c-s3); }
+    .score-chip[data-min="3"].active { background: var(--c-s3-bg); }
+    .score-chip[data-min="1"] { color: var(--c-muted); }
+    .score-chip[data-min="1"].active { background: var(--c-border); }
+
+    .filter-divider {
+      width: 1px; height: 28px;
+      background: var(--c-border);
+      flex-shrink: 0;
+    }
+
+    /* ── Main Content ── */
+    main {
+      padding: 20px 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .papers-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .papers-header h2 { font-size: .95rem; color: var(--c-muted); font-weight: 500; }
+    #paper-count { font-weight: 700; color: var(--c-text); }
+
+    /* ── Paper Cards Grid ── */
+    #papers-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
+    }
+    .paper-card {
+      background: var(--c-surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1.5px solid var(--c-border);
+      overflow: hidden;
+      transition: box-shadow .15s, transform .15s;
+      display: flex;
+      flex-direction: column;
+    }
+    .paper-card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,.12);
+      transform: translateY(-1px);
+    }
+    .card-top { padding: 16px 16px 12px; flex: 1; }
+    .card-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .processed-date {
+      font-size: .70rem;
+      color: #94a3b8;
+      letter-spacing: .01em;
+      margin-bottom: 2px;
+    }
+    .journal-year {
+      font-size: .78rem;
+      color: var(--c-muted);
+      font-weight: 500;
+      flex: 1;
+    }
+
+    /* ── Score Badge (클릭 편집) ── */
+    .score-wrap {
+      position: relative;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+    .score-badge {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+      transition: opacity .15s;
+    }
+    .score-badge:hover { opacity: .8; }
+    .score-badge.s5 { background: var(--c-s5-bg); color: var(--c-s5); }
+    .score-badge.s4 { background: var(--c-s4-bg); color: var(--c-s4); }
+    .score-badge.s3 { background: var(--c-s3-bg); color: var(--c-s3); }
+    .score-badge.s2 { background: var(--c-s2-bg); color: var(--c-s2); }
+    .score-badge.s1 { background: var(--c-s1-bg); color: var(--c-s1); }
+
+    .score-picker {
+      position: absolute;
+      top: 42px;
+      right: 0;
+      background: white;
+      border: 1.5px solid var(--c-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      padding: 6px 8px;
+      display: flex;
+      gap: 5px;
+      z-index: 50;
+      white-space: nowrap;
+    }
+    .score-picker.hidden { display: none; }
+    .sp-btn {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: .85rem;
+      transition: all .1s;
+    }
+    .sp-btn:hover { transform: scale(1.15); }
+    .sp-btn.s1 { background: var(--c-s1-bg); color: var(--c-s1); border-color: var(--c-s1); }
+    .sp-btn.s2 { background: var(--c-s2-bg); color: var(--c-s2); border-color: var(--c-s2); }
+    .sp-btn.s3 { background: var(--c-s3-bg); color: var(--c-s3); border-color: var(--c-s3); }
+    .sp-btn.s4 { background: var(--c-s4-bg); color: var(--c-s4); border-color: var(--c-s4); }
+    .sp-btn.s5 { background: var(--c-s5-bg); color: var(--c-s5); border-color: var(--c-s5); }
+
+    /* ── Paper Text ── */
+    .paper-title {
+      font-size: .95rem; font-weight: 700;
+      line-height: 1.4; color: var(--c-text);
+      margin-bottom: 6px;
+    }
+    .paper-title a { color: inherit; text-decoration: none; }
+    .paper-title a:hover { color: var(--c-accent); }
+    .paper-authors {
+      font-size: .78rem; color: var(--c-muted);
+      margin-bottom: 10px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Pills ── */
+    .meta-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: .72rem;
+      font-weight: 600;
+      background: #e2e8f0;
+      color: #475569;
+      white-space: nowrap;
+    }
+    .pill.method { background: #dbeafe; color: #1d4ed8; }
+    .pill.category {
+      background: #ede9fe;
+      color: #6d28d9;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .pill.category:hover { background: #ddd6fe; }
+    .pill-edit-btn {
+      background: none; border: 1.5px dashed var(--c-border);
+      color: var(--c-muted); border-radius: 20px;
+      padding: 1px 7px; font-size: .72rem;
+      cursor: pointer; transition: all .1s;
+    }
+    .pill-edit-btn:hover { border-color: #6d28d9; color: #6d28d9; }
+
+    /* ── Category Editor (inline) ── */
+    .cat-editor {
+      margin-top: 6px;
+      padding: 10px 12px;
+      background: #faf5ff;
+      border: 1.5px solid #e9d5ff;
+      border-radius: 8px;
+      font-size: .8rem;
+    }
+    .cat-editor.hidden { display: none; }
+    .cat-editor-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      margin-bottom: 8px;
+    }
+    .cat-editor-grid label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      color: var(--c-text);
+      font-weight: 500;
+    }
+    .cat-editor-grid input[type=checkbox] {
+      width: 14px; height: 14px;
+      accent-color: #6d28d9;
+      cursor: pointer;
+      border: none; padding: 0;
+    }
+    .cat-editor-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .btn-save-cats {
+      background: #6d28d9; color: white;
+      border: none; border-radius: 5px;
+      padding: 4px 12px; font-size: .78rem;
+      font-weight: 700; cursor: pointer;
+    }
+    .btn-save-cats:hover { background: #5b21b6; }
+    .btn-cancel-cats {
+      background: none; color: var(--c-muted);
+      border: 1.5px solid var(--c-border); border-radius: 5px;
+      padding: 4px 10px; font-size: .78rem;
+      cursor: pointer;
+    }
+    .btn-cancel-cats:hover { background: var(--c-bg); }
+
+    /* ── Abstract / Findings / Reason blocks ── */
+    .abstract-block { font-size: .82rem; color: #475569; line-height: 1.55; }
+    .findings-block {
+      margin-top: 8px; padding: 8px 10px;
+      background: #f0fdf4; border-left: 3px solid #86efac;
+      border-radius: 0 4px 4px 0;
+      font-size: .80rem; color: #166534; line-height: 1.55;
+      display: none;
+    }
+    .findings-block.visible { display: block; }
+    .reason-block {
+      margin-top: 8px; padding: 8px 10px;
+      background: #f8fafc; border-left: 3px solid var(--c-border);
+      border-radius: 0 4px 4px 0;
+      font-size: .78rem; color: var(--c-muted); line-height: 1.5;
+      display: none;
+    }
+    .reason-block.visible { display: block; }
+    .toggle-link {
+      font-size: .75rem; color: var(--c-accent);
+      cursor: pointer; display: inline-block;
+      margin-top: 2px; border: none; background: none; padding: 0;
+    }
+    .toggle-link:hover { text-decoration: underline; }
+
+    /* ── Card Footer ── */
+    .card-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--c-border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: #fafafa;
+    }
+
+    /* ── Empty / Loading ── */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--c-muted);
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 1.1rem; margin-bottom: 6px; color: var(--c-text); }
+    .empty-state p { font-size: .88rem; }
+
+    /* ── Error List ── */
+    .error-list {
+      margin: 12px 24px;
+      background: #fee2e2; border: 1px solid #fca5a5;
+      border-radius: 8px; padding: 12px 16px;
+      font-size: .85rem; color: #7f1d1d; display: none;
+    }
+    .error-list.visible { display: block; }
+    .error-list ul { margin-top: 6px; padding-left: 20px; }
+
+    /* ── Category Manager Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.2);
+      width: 400px; max-width: 92vw;
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--c-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 { font-size: 1rem; font-weight: 700; }
+    .modal-close {
+      background: none; border: none;
+      font-size: 1.1rem; color: var(--c-muted);
+      cursor: pointer; padding: 4px 8px; border-radius: 4px;
+    }
+    .modal-close:hover { background: var(--c-bg); color: var(--c-text); }
+    .modal-body {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .cat-manager-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: .88rem;
+    }
+    .cat-manager-row:hover { background: var(--c-bg); }
+    .btn-del-cat {
+      background: none; border: none;
+      color: #dc2626; cursor: pointer;
+      font-size: .85rem; padding: 2px 6px; border-radius: 4px;
+    }
+    .btn-del-cat:hover { background: #fee2e2; }
+    .add-cat-row {
+      display: flex; gap: 8px; margin-top: 14px;
+      padding-top: 14px; border-top: 1px solid var(--c-border);
+    }
+    .add-cat-row input {
+      flex: 1; padding: 7px 10px;
+      border: 1.5px solid var(--c-border); border-radius: 6px;
+      font-size: .85rem;
+    }
+    .add-cat-row input:focus { border-color: #6d28d9; outline: none; }
+    .btn-add-cat {
+      background: #6d28d9; color: white;
+      border: none; border-radius: 6px;
+      padding: 7px 14px; font-size: .85rem;
+      font-weight: 700; cursor: pointer;
+    }
+    .btn-add-cat:hover { background: #5b21b6; }
+
+    /* ── Check Button (카드 하단 확인 버튼) ── */
+    .check-btn {
+      padding: 4px 11px;
+      border-radius: 5px;
+      border: 1.5px solid var(--c-border);
+      font-size: .80rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--c-bg);
+      color: var(--c-muted);
+      transition: all .15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .check-btn:hover { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+    .check-btn.checked { background: #dcfce7; color: #16a34a; border-color: #16a34a; }
+
+    /* ── Check Filter Chips ── */
+    .check-filter { display: flex; gap: 4px; }
+    .check-chip {
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1.5px solid var(--c-border);
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--c-bg);
+      color: var(--c-muted);
+      transition: all .15s;
+      user-select: none;
+    }
+    .check-chip.active { background: #f0fdf4; border-color: #16a34a; color: #16a34a; }
+    .check-chip[data-checked="0"].active { background: #fef3c7; border-color: #d97706; color: #d97706; }
+
+    /* ── Active Category Filter Tag ── */
+    .cat-filter-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px 3px 12px;
+      background: #ede9fe;
+      color: #6d28d9;
+      border-radius: 20px;
+      font-size: .82rem;
+      font-weight: 600;
+    }
+    .cat-filter-tag.hidden { display: none; }
+    .cat-filter-tag-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cat-filter-tag-clear {
+      background: none; border: none;
+      color: #6d28d9; cursor: pointer;
+      font-size: .85rem; padding: 0 2px;
+      border-radius: 50%; line-height: 1;
+      transition: background .1s;
+    }
+    .cat-filter-tag-clear:hover { background: #d8b4fe; }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .stats-row { flex-wrap: wrap; }
+      .cat-stats-panel { flex: 100%; }
+      #papers-grid { grid-template-columns: 1fr; }
+      .filter-bar { padding: 10px 16px; }
+      main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <h1><span>📚</span> PaperAlert</h1>
+  <div class="header-right">
+    <span id="last-run" style="font-size:.78rem;opacity:.65;"></span>
+    <button class="btn btn-primary" id="process-btn" onclick="startProcessing()">
+      <span id="process-btn-icon">📥</span>
+      새 이메일 처리
+    </button>
+  </div>
+</header>
+
+<!-- Status Banner -->
+<div id="status-banner" class="hidden">
+  <div class="spinner" id="status-spinner"></div>
+  <div id="status-progress">
+    <div id="status-message">처리 중...</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+  </div>
+  <button class="btn-cancel" id="cancel-btn" onclick="cancelProcessing()">⏹ 취소</button>
+</div>
+
+<!-- Error List -->
+<div class="error-list" id="error-list">
+  <strong>처리 중 오류 발생:</strong>
+  <ul id="error-items"></ul>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="value" id="stat-total">–</div>
+    <div class="label">전체 논문</div>
+  </div>
+  <div class="stat-card">
+    <div class="value" id="stat-high">–</div>
+    <div class="label">고관심 (4-5점)</div>
+  </div>
+  <div class="stat-card" style="cursor:pointer"
+       onclick="setCheckedFilter(document.querySelector('.check-chip[data-checked=\'0\']'), 0)"
+       title="클릭하면 미확인 논문만 필터링">
+    <div class="value" id="stat-unchecked" style="color:var(--c-s3)">–</div>
+    <div class="label">미확인 논문</div>
+  </div>
+  <div class="cat-stats-panel">
+    <div class="cat-stats-header">
+      <span class="cat-stats-title">논문 분류 현황</span>
+      <button class="btn-ghost" onclick="openCatManager()">⚙ 분류 관리</button>
+    </div>
+    <div class="cat-stats-grid" id="cat-stats-grid">
+      <!-- 동적 생성 -->
+    </div>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <label>점수 필터</label>
+  <div class="score-filter">
+    <span class="score-chip active" data-min="1" onclick="setScoreFilter(this)">전체</span>
+    <span class="score-chip" data-min="3" onclick="setScoreFilter(this)">3점+</span>
+    <span class="score-chip" data-min="4" onclick="setScoreFilter(this)">4점+</span>
+    <span class="score-chip" data-min="5" onclick="setScoreFilter(this)">5점만</span>
+  </div>
+  <div class="filter-divider"></div>
+  <label>확인 여부</label>
+  <div class="check-filter">
+    <span class="check-chip active" data-checked="all" onclick="setCheckedFilter(this, null)">전체</span>
+    <span class="check-chip" data-checked="0" onclick="setCheckedFilter(this, 0)">미확인</span>
+    <span class="check-chip" data-checked="1" onclick="setCheckedFilter(this, 1)">확인</span>
+  </div>
+  <div class="filter-divider"></div>
+  <label>학술지</label>
+  <select id="journal-filter" onchange="loadPapers()">
+    <option value="">전체</option>
+  </select>
+  <label>연도</label>
+  <select id="year-filter" onchange="loadPapers()">
+    <option value="">전체</option>
+  </select>
+  <label>분류</label>
+  <select id="cat-filter" onchange="setCatFilterFromDropdown()">
+    <option value="">전체</option>
+  </select>
+  <div class="filter-divider"></div>
+  <label>정렬</label>
+  <select id="sort-select" onchange="loadPapers()">
+    <option value="interest_score|DESC">점수 높은순</option>
+    <option value="interest_score|ASC">점수 낮은순</option>
+    <option value="processed_at|DESC">처리일 최신순</option>
+    <option value="processed_at|ASC">처리일 오래된순</option>
+    <option value="year|DESC">출판연도 최신순</option>
+    <option value="journal|ASC">학술지명순</option>
+  </select>
+  <div class="filter-divider"></div>
+  <input type="text" id="search-input" placeholder="제목, 저자 검색..."
+         oninput="debounceSearch()">
+</div>
+
+<!-- Main -->
+<main>
+  <div class="papers-header">
+    <h2><span id="paper-count">0</span>편의 논문</h2>
+    <div id="cat-filter-tag" class="cat-filter-tag hidden">
+      <span class="cat-filter-tag-text" id="cat-filter-tag-text"></span>
+      <button class="cat-filter-tag-clear" onclick="clearCatFilter()" title="분류 필터 해제">✕</button>
+    </div>
+  </div>
+  <div id="papers-grid">
+    <div class="empty-state">
+      <div class="icon">📭</div>
+      <h3>아직 논문이 없습니다</h3>
+      <p>"새 이메일 처리" 버튼을 눌러 Gmail에서 논문을 가져오세요.</p>
+    </div>
+  </div>
+</main>
+
+<!-- Category Manager Modal -->
+<div class="modal-overlay hidden" id="cat-manager-modal" onclick="closeCatManagerOnBg(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📂 분류 관리</h3>
+      <button class="modal-close" onclick="closeCatManager()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="cat-manager-list"><!-- 동적 생성 --></div>
+      <div class="add-cat-row">
+        <input id="new-cat-input" placeholder="새 분류 이름 입력..."
+               onkeydown="if(event.key==='Enter') addCategory()">
+        <button class="btn-add-cat" onclick="addCategory()">추가</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────── //
+let minScore = 1;
+let activeCat = '';
+let activeChecked = null;   // null=전체, 0=미확인, 1=확인
+let allCategories = [];
+let pollingTimer = null;
+let searchTimer = null;
+const SCORE_LABELS = ['', '관련 낮음', '낮음', '보통', '높음', '매우 높음'];
+
+// ─── Init ──────────────────────────────────────────────────────────────── //
+document.addEventListener('DOMContentLoaded', async () => {
+  allCategories = await fetch('/api/categories').then(r => r.json());
+  populateCatFilterDropdown();
+  await loadStats();
+  await loadPapers();
+  checkStatus();
+  // 바깥 클릭 시 score picker 닫기
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.score-picker').forEach(p => p.classList.add('hidden'));
+  });
+});
+
+// ─── Stats ─────────────────────────────────────────────────────────────── //
+async function loadStats() {
+  try {
+    const s = await fetch('/api/stats').then(r => r.json());
+
+    document.getElementById('stat-total').textContent     = s.total.toLocaleString();
+    document.getElementById('stat-high').textContent      = s.high_interest.toLocaleString();
+    document.getElementById('stat-unchecked').textContent = (s.unchecked ?? 0).toLocaleString();
+
+    // 카테고리 통계
+    const maxCount = Math.max(...(s.category_stats || []).map(c => c.count), 1);
+    const grid = document.getElementById('cat-stats-grid');
+    grid.innerHTML = (s.category_stats || []).map(c => {
+      const barW = c.count > 0 ? Math.max(12, Math.round(c.count / maxCount * 80)) : 0;
+      const isActive = c.name === activeCat;
+      return `<div class="cat-stat-row${isActive ? ' active-filter' : ''}"
+                   onclick="setCatFilter('${esc(c.name)}')" title="${esc(c.name)}">
+        <span class="cat-stat-name">${esc(c.name)}</span>
+        <div class="cat-stat-bar" style="width:${barW}px"></div>
+        <span class="cat-stat-count">${c.count}</span>
+      </div>`;
+    }).join('');
+
+    // 학술지·연도 드롭다운
+    const jSel = document.getElementById('journal-filter');
+    const ySel = document.getElementById('year-filter');
+    const curJ = jSel.value, curY = ySel.value;
+    jSel.innerHTML = '<option value="">전체 학술지</option>' +
+      (s.journals || []).map(j => `<option value="${esc(j)}"${j===curJ?' selected':''}>${esc(j)}</option>`).join('');
+    ySel.innerHTML = '<option value="">전체 연도</option>' +
+      (s.years || []).map(y => `<option value="${y}"${String(y)===curY?' selected':''}>${y}</option>`).join('');
+  } catch (e) {
+    console.error('Stats load failed:', e);
+  }
+}
+
+// ─── Category filter helpers ───────────────────────────────────────────── //
+function populateCatFilterDropdown() {
+  const sel = document.getElementById('cat-filter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">전체 분류</option>' +
+    allCategories.map(c => `<option value="${esc(c)}"${c===cur?' selected':''}>${esc(c)}</option>`).join('');
+}
+
+function setCatFilter(cat) {
+  // 같은 카테고리 클릭 시 토글 해제
+  activeCat = (activeCat === cat) ? '' : cat;
+  document.getElementById('cat-filter').value = activeCat;
+  updateCatFilterTag();
+  loadStats();  // 하이라이트 갱신
+  loadPapers();
+}
+
+function setCatFilterFromDropdown() {
+  activeCat = document.getElementById('cat-filter').value;
+  updateCatFilterTag();
+  loadStats();
+  loadPapers();
+}
+
+function updateCatFilterTag() {
+  const tag = document.getElementById('cat-filter-tag');
+  const tagText = document.getElementById('cat-filter-tag-text');
+  if (activeCat) {
+    tagText.textContent = activeCat;
+    tag.classList.remove('hidden');
+  } else {
+    tag.classList.add('hidden');
+  }
+}
+
+function clearCatFilter() {
+  activeCat = '';
+  document.getElementById('cat-filter').value = '';
+  updateCatFilterTag();
+  loadStats();
+  loadPapers();
+}
+
+// ─── Checked filter ────────────────────────────────────────────────────── //
+function setCheckedFilter(chip, val) {
+  document.querySelectorAll('.check-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  activeChecked = val;
+  loadPapers();
+}
+
+// ─── Papers ────────────────────────────────────────────────────────────── //
+async function loadPapers() {
+  const sortVal  = document.getElementById('sort-select').value;
+  const [sortBy, order] = sortVal.split('|');
+  const journal  = document.getElementById('journal-filter').value;
+  const year     = document.getElementById('year-filter').value;
+  const search   = document.getElementById('search-input').value.trim();
+
+  const params = new URLSearchParams({ min_score: minScore, sort_by: sortBy, order });
+  if (journal)            params.set('journal', journal);
+  if (year)               params.set('year', year);
+  if (search)             params.set('search', search);
+  if (activeCat)          params.set('category', activeCat);
+  if (activeChecked !== null) params.set('checked', activeChecked);
+
+  try {
+    const papers = await fetch('/api/papers?' + params).then(r => r.json());
+    renderPapers(papers);
+  } catch (e) {
+    console.error('Papers load failed:', e);
+  }
+}
+
+function renderPapers(papers) {
+  const grid = document.getElementById('papers-grid');
+  document.getElementById('paper-count').textContent = papers.length.toLocaleString();
+
+  if (papers.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <div class="icon">🔍</div>
+      <h3>해당 조건의 논문이 없습니다</h3>
+      <p>필터를 조정하거나 새 이메일을 처리해보세요.</p>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = papers.map(p => paperCard(p)).join('');
+}
+
+// ─── Paper Card ────────────────────────────────────────────────────────── //
+function paperCard(p) {
+  const sc = p.interest_score || 0;
+  const linkUrl   = p.link || (p.doi ? `https://doi.org/${p.doi}` : null);
+  const scholarUrl = `https://scholar.google.com/scholar?q=${encodeURIComponent(p.title||'')}`;
+  const journalYear = [p.journal, p.year].filter(Boolean).join(' · ');
+
+  const titleHtml = linkUrl
+    ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener">${esc(p.title)}</a>`
+    : esc(p.title);
+
+  // 처리일 포맷 (2024-01-15 → 2024.01.15)
+  const procDate = p.processed_at ? p.processed_at.substring(0, 10).replace(/-/g, '.') : '';
+
+  // 카테고리 pills (클릭 시 필터)
+  const cats = p.relevance_category
+    ? p.relevance_category.split(',').map(c => c.trim()).filter(Boolean)
+    : [];
+  const catPills = cats.map(c =>
+    `<span class="pill category" onclick="setCatFilter('${esc(c)}')" title="${esc(c)}">${esc(c)}</span>`
+  ).join('');
+
+  // 체크박스 초기값
+  const catCheckboxes = allCategories.map(cat => {
+    const checked = cats.includes(cat) ? 'checked' : '';
+    return `<label><input type="checkbox" value="${esc(cat)}" ${checked}>${esc(cat)}</label>`;
+  }).join('');
+
+  const pillsHtml = `<div class="meta-pills" id="pills-${p.id}">
+    ${p.method ? `<span class="pill method">${esc(p.method)}</span>` : ''}
+    ${catPills}
+    <button class="pill-edit-btn" onclick="toggleCatEditor(event,${p.id})" title="분류 편집">✏ 편집</button>
+  </div>
+  <div class="cat-editor hidden" id="cedit-${p.id}">
+    <div class="cat-editor-grid">${catCheckboxes}</div>
+    <div class="cat-editor-footer">
+      <button class="btn-cancel-cats" onclick="toggleCatEditor(event,${p.id})">취소</button>
+      <button class="btn-save-cats" onclick="savePaperCategories(${p.id})">저장</button>
+    </div>
+  </div>`;
+
+  const summaryHtml = p.summary_kr
+    ? `<div class="abstract-block" style="margin-bottom:6px">
+        <em style="color:#475569;font-size:.82rem">${esc(p.summary_kr)}</em>
+      </div>` : '';
+
+  const findingsHtml = p.key_findings
+    ? `<button class="toggle-link" onclick="toggleBlock('findings-${p.id}')">🔍 주요 발견</button>
+       <div class="findings-block" id="findings-${p.id}">${esc(p.key_findings)}</div>` : '';
+
+  const contextLines = [p.field_data, p.score_reason].filter(Boolean);
+  const reasonHtml = contextLines.length
+    ? `<button class="toggle-link" onclick="toggleBlock('reason-${p.id}')">💬 데이터 & 평가</button>
+       <div class="reason-block" id="reason-${p.id}">${contextLines.map(esc).join('<br><br>')}</div>` : '';
+
+  const linkBtn = linkUrl
+    ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener"
+          class="btn btn-sm btn-outline">논문 열기</a>`
+    : `<a href="${scholarUrl}" target="_blank" rel="noopener"
+          class="btn btn-sm btn-outline" style="opacity:.75" title="Google Scholar에서 검색">🔍 Scholar</a>`;
+
+  const isChecked = p.is_checked === 1;
+  const checkBtn = `<button class="check-btn${isChecked ? ' checked' : ''}"
+      id="chk-${p.id}"
+      data-paper-id="${p.id}"
+      data-checked="${isChecked ? 1 : 0}"
+      onclick="toggleChecked(this)"
+      title="${isChecked ? '확인됨 — 클릭하여 미확인으로 변경' : '미확인 — 클릭하여 확인으로 변경'}"
+    >${isChecked ? '✓ 확인' : '○ 미확인'}</button>`;
+
+  return `<div class="paper-card" id="card-${p.id}">
+    <div class="card-top">
+      <div class="card-meta">
+        <div style="flex:1;min-width:0;">
+          ${procDate ? `<div class="processed-date">${procDate} 처리</div>` : ''}
+          <div class="journal-year">${esc(journalYear)}</div>
+        </div>
+        <div class="score-wrap">
+          <div class="score-badge s${sc}" id="sbadge-${p.id}"
+               onclick="toggleScorePicker(event,${p.id})"
+               title="${SCORE_LABELS[sc]} — 클릭하여 수정">${sc}</div>
+          <div class="score-picker hidden" id="spicker-${p.id}">
+            ${[1,2,3,4,5].map(n =>
+              `<button class="sp-btn s${n}" onclick="saveScore(event,${p.id},${n})">${n}</button>`
+            ).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="paper-title">${titleHtml}</div>
+      <div class="paper-authors">${esc(p.authors || '')}</div>
+      ${pillsHtml}
+      ${summaryHtml}
+      ${findingsHtml}
+      ${reasonHtml}
+    </div>
+    <div class="card-footer">
+      ${linkBtn}
+      <div style="flex:1"></div>
+      ${checkBtn}
+    </div>
+  </div>`;
+}
+
+// ─── Score editing ─────────────────────────────────────────────────────── //
+function toggleScorePicker(event, paperId) {
+  event.stopPropagation();
+  const picker = document.getElementById(`spicker-${paperId}`);
+  const isHidden = picker.classList.contains('hidden');
+  document.querySelectorAll('.score-picker').forEach(p => p.classList.add('hidden'));
+  if (isHidden) picker.classList.remove('hidden');
+}
+
+async function saveScore(event, paperId, score) {
+  event.stopPropagation();
+  document.getElementById(`spicker-${paperId}`).classList.add('hidden');
+  try {
+    const res = await fetch(`/api/papers/${paperId}/score`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score }),
+    });
+    if (res.ok) {
+      const badge = document.getElementById(`sbadge-${paperId}`);
+      badge.className = `score-badge s${score}`;
+      badge.textContent = score;
+      badge.title = `${SCORE_LABELS[score]} — 클릭하여 수정`;
+      loadStats();
+    }
+  } catch (e) { console.error('점수 저장 실패:', e); }
+}
+
+// ─── Category editing per paper ───────────────────────────────────────── //
+function toggleCatEditor(event, paperId) {
+  event.stopPropagation();
+  const editor = document.getElementById(`cedit-${paperId}`);
+  const isHidden = editor.classList.contains('hidden');
+  // 다른 에디터 닫기
+  document.querySelectorAll('.cat-editor').forEach(e => e.classList.add('hidden'));
+  if (isHidden) editor.classList.remove('hidden');
+}
+
+async function savePaperCategories(paperId) {
+  const editor = document.getElementById(`cedit-${paperId}`);
+  const cats = [...editor.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value);
+  try {
+    const res = await fetch(`/api/papers/${paperId}/categories`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories: cats }),
+    });
+    if (res.ok) {
+      // pills 갱신
+      const pillsDiv = document.getElementById(`pills-${paperId}`);
+      const catPills = cats.map(c =>
+        `<span class="pill category" onclick="setCatFilter('${esc(c)}')" title="${esc(c)}">${esc(c)}</span>`
+      ).join('');
+      // method pill 유지 + 새 cat pills + 편집 버튼
+      const methodPill = pillsDiv.querySelector('.pill.method');
+      const methodHtml = methodPill ? methodPill.outerHTML : '';
+      pillsDiv.innerHTML = methodHtml + catPills +
+        `<button class="pill-edit-btn" onclick="toggleCatEditor(event,${paperId})" title="분류 편집">✏ 편집</button>`;
+      editor.classList.add('hidden');
+      loadStats();
+    }
+  } catch (e) { console.error('카테고리 저장 실패:', e); }
+}
+
+// ─── Category Manager Modal ────────────────────────────────────────────── //
+function openCatManager() {
+  renderCatManagerList();
+  document.getElementById('cat-manager-modal').classList.remove('hidden');
+}
+function closeCatManager() {
+  document.getElementById('cat-manager-modal').classList.add('hidden');
+}
+function closeCatManagerOnBg(e) {
+  if (e.target === document.getElementById('cat-manager-modal')) closeCatManager();
+}
+
+function renderCatManagerList() {
+  document.getElementById('cat-manager-list').innerHTML = allCategories.length
+    ? allCategories.map(cat => `
+        <div class="cat-manager-row">
+          <span>${esc(cat)}</span>
+          <button class="btn-del-cat" onclick="deleteCategory('${esc(cat)}')"
+                  title="삭제">✕</button>
+        </div>`).join('')
+    : '<p style="color:var(--c-muted);font-size:.85rem;">등록된 분류가 없습니다.</p>';
+}
+
+async function addCategory() {
+  const input = document.getElementById('new-cat-input');
+  const name = input.value.trim();
+  if (!name) return;
+  const res = await fetch('/api/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (res.ok) {
+    allCategories.push(name);
+    input.value = '';
+    renderCatManagerList();
+    populateCatFilterDropdown();
+    loadStats();
+  } else {
+    const d = await res.json();
+    alert(d.error || '추가 실패');
+  }
+}
+
+async function deleteCategory(name) {
+  if (!confirm(`"${name}" 분류를 삭제하시겠습니까?\n(논문의 기존 태그에서도 제거됩니다)`)) return;
+  await fetch(`/api/categories/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  allCategories = allCategories.filter(c => c !== name);
+  if (activeCat === name) {
+    activeCat = '';
+    document.getElementById('cat-filter').value = '';
+    updateCatFilterTag();
+  }
+  renderCatManagerList();
+  populateCatFilterDropdown();
+  loadStats();
+  loadPapers();
+}
+
+// ─── Checked toggle ────────────────────────────────────────────────────── //
+async function toggleChecked(btn) {
+  const paperId  = parseInt(btn.dataset.paperId);
+  const curVal   = parseInt(btn.dataset.checked);
+  const newVal   = curVal === 1 ? 0 : 1;
+  try {
+    const res = await fetch(`/api/papers/${paperId}/checked`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checked: newVal }),
+    });
+    if (res.ok) {
+      btn.dataset.checked = newVal;
+      if (newVal === 1) {
+        btn.className = 'check-btn checked';
+        btn.textContent = '✓ 확인';
+        btn.title = '확인됨 — 클릭하여 미확인으로 변경';
+      } else {
+        btn.className = 'check-btn';
+        btn.textContent = '○ 미확인';
+        btn.title = '미확인 — 클릭하여 확인으로 변경';
+      }
+      // 확인 여부 필터 중이면 목록 갱신
+      if (activeChecked !== null) loadPapers();
+    }
+  } catch (e) { console.error('확인 상태 저장 실패:', e); }
+}
+
+// ─── Toggle blocks ─────────────────────────────────────────────────────── //
+function toggleBlock(id) {
+  document.getElementById(id)?.classList.toggle('visible');
+}
+
+// ─── Score filter ──────────────────────────────────────────────────────── //
+function setScoreFilter(chip) {
+  document.querySelectorAll('.score-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  minScore = parseInt(chip.dataset.min);
+  loadPapers();
+}
+
+// ─── Search debounce ───────────────────────────────────────────────────── //
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadPapers, 350);
+}
+
+// ─── Process emails ────────────────────────────────────────────────────── //
+async function cancelProcessing() {
+  const btn = document.getElementById('cancel-btn');
+  btn.disabled = true;
+  btn.textContent = '취소 중...';
+  try {
+    await fetch('/api/cancel', { method: 'POST' });
+  } catch (e) {
+    console.error('취소 요청 실패:', e);
+  }
+}
+
+async function startProcessing() {
+  const btn = document.getElementById('process-btn');
+  btn.disabled = true;
+  document.getElementById('process-btn-icon').textContent = '⏳';
+  document.getElementById('error-list').classList.remove('visible');
+  try {
+    const res = await fetch('/api/process', { method: 'POST' });
+    const data = await res.json();
+    if (data.error) {
+      alert(data.error);
+      btn.disabled = false;
+      document.getElementById('process-btn-icon').textContent = '📥';
+      return;
+    }
+    startPolling();
+  } catch (e) {
+    alert('처리 요청 실패: ' + e);
+    btn.disabled = false;
+    document.getElementById('process-btn-icon').textContent = '📥';
+  }
+}
+
+function startPolling() {
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = setInterval(checkStatus, 1500);
+}
+
+async function checkStatus() {
+  try {
+    const s = await fetch('/api/status').then(r => r.json());
+    const banner  = document.getElementById('status-banner');
+    const spinner = document.getElementById('status-spinner');
+    const msgEl   = document.getElementById('status-message');
+    const fillEl  = document.getElementById('progress-fill');
+    const btn     = document.getElementById('process-btn');
+
+    if (s.is_processing || s.message !== '대기 중') {
+      banner.classList.remove('hidden');
+      msgEl.textContent = s.message;
+      const pct = s.total > 0 ? Math.round(s.current / s.total * 100) : (s.is_processing ? 20 : 100);
+      fillEl.style.width = pct + '%';
+    } else {
+      banner.classList.add('hidden');
+    }
+
+    if (!s.is_processing) {
+      clearInterval(pollingTimer); pollingTimer = null;
+      btn.disabled = false;
+      document.getElementById('process-btn-icon').textContent = '📥';
+      spinner.style.display = 'none';
+      const cancelBtn = document.getElementById('cancel-btn');
+      cancelBtn.disabled = false;
+      cancelBtn.textContent = '⏹ 취소';
+      if (s.last_run) document.getElementById('last-run').textContent = '마지막 처리: ' + s.last_run;
+      if (s.errors && s.errors.length > 0) {
+        document.getElementById('error-list').classList.add('visible');
+        document.getElementById('error-items').innerHTML = s.errors.map(e => `<li>${esc(e)}</li>`).join('');
+      }
+      await loadStats();
+      await loadPapers();
+    }
+  } catch (e) { console.error('Status check failed:', e); }
+}
+
+// ─── Util ──────────────────────────────────────────────────────────────── //
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+</script>
+</body>
+</html>

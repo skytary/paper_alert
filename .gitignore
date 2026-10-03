@@ -1,0 +1,26 @@
+# 비밀 정보 (절대 올리지 않음)
+.env
+credentials.json
+token.json
+
+# 개인 데이터
+papers.db
+*.db
+
+# 가상환경, 캐시
+.venv/
+__pycache__/
+*.pyc
+
+# 로그
+*.log
+
+# Claude Code 로컬 설정
+.claude/
+
+# 앱과 무관한 개인 자료
+2025-12 작업/
+Zotero*.txt
+Zotero*.md
+character_maker.html
+*.jpg
