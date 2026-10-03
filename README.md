@@ -19,7 +19,7 @@ Gmail로 들어오는 학술지 신규 논문 알림(eTOC, Google Scholar 알림
 ## 설치
 
 ```powershell
-git clone https://github.com/<계정>/paper_alert.git
+git clone https://github.com/skytary/paper_alert.git
 cd paper_alert
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
@@ -60,3 +60,7 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 - Claude 모델은 `paper_processor.py`의 `MODEL`에서 바꿀 수 있습니다.
 
 Claude Code로 만들었습니다(2026년 3~4월).
+
+## 라이선스
+
+MIT License. 자세한 내용은 [LICENSE](LICENSE)를 보세요.
