@@ -1,75 +1,86 @@
 # PaperAlert
 
-Gmail로 들어오는 학술지 신규 논문 알림(eTOC, Google Scholar 알림 등)을 모아서 한 화면에 정리하고, 마음에 드는 논문을 Zotero로 바로 보내는 Windows용 데스크톱 앱입니다.
+**English** | [한국어](README.ko.md)
 
-## 하는 일
+A Windows desktop app that collects new-article alerts from academic journals in your Gmail (tables of contents, OnlineFirst alerts, Google Scholar alerts, and so on), organizes them on one screen, and sends the papers you want to Zotero.
 
-1. Gmail에서 `논문_알리미` 라벨이 붙은 안 읽은 메일을 가져옵니다.
-2. Claude API로 메일 본문에서 논문(제목, 저자, 학술지, 링크)을 뽑고, 사용자의 연구 관심사에 비춰 1~5점으로 관심도를 매깁니다. 한국어 요약, 연구 방법, 자료, 주요 결과도 함께 정리합니다.
-3. 결과를 로컬 SQLite DB(`papers.db`)에 저장하고, 웹 화면에서 점수·학술지·연도·카테고리로 거르고 정렬해 볼 수 있습니다.
-4. 버튼 하나로 논문을 Zotero 라이브러리에 추가합니다(`PaperAlert`, `score:N` 태그가 붙습니다).
+For day-to-day use, see the [User Manual](MANUAL.md).
 
-## 필요한 것
+## What it does
 
-- Windows, Python 3.10 이상
-- Anthropic API 키 (https://console.anthropic.com)
-- Gmail API를 켠 Google Cloud 프로젝트의 OAuth 클라이언트 파일(`credentials.json`, 데스크톱 앱 유형)
-- Zotero API 키와 사용자 ID (https://www.zotero.org/settings/keys)
+1. Reads unread Gmail messages with the label `논문_알리미` ("paper alerts"; the label name is configurable).
+2. Uses the Claude API to extract every article listed in each email (book reviews are skipped).
+3. Looks up each article's DOI and abstract in Crossref and OpenAlex, and skips articles already saved (same DOI or title).
+4. Scores each new article from 1 to 5 against your research interests and writes a summary, the data, the method, and the key findings, in Korean or English.
+5. Saves the results in a local SQLite database (`papers.db`) that you can filter and sort by score, journal, year, and category.
+6. Sends papers to Zotero with full bibliographic data and a summary note, without duplicating items already in your library. The target collection can be fixed, mapped from categories, or chosen by Claude from a criteria file you write.
+7. Offers a batch mode (Message Batches API) that halves the cost when many emails have piled up.
 
-## 설치
+## Requirements
+
+- Windows, Python 3.10 or later
+- An Anthropic API key with credits (https://platform.claude.com)
+- An OAuth client file (`credentials.json`, desktop app type) from a Google Cloud project with the Gmail API enabled
+- A Zotero API key with write access and your Zotero user ID (https://www.zotero.org/settings/keys). Not needed if you do not use the Zotero features.
+
+## Installation
 
 ```powershell
 git clone https://github.com/skytary/paper_alert.git
 cd paper_alert
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-copy .env.example .env    # .env를 열어 API 키를 채웁니다
+copy .env.example .env    # open .env and fill in your API keys
 ```
 
-그다음:
+Then:
 
-1. Google Cloud Console에서 내려받은 OAuth 클라이언트 파일을 `credentials.json`이라는 이름으로 이 폴더에 둡니다.
-2. Gmail에 `논문_알리미` 라벨을 만들고, 논문 알림 메일에 이 라벨이 자동으로 붙도록 필터를 설정합니다. 라벨 이름을 바꾸려면 `gmail_client.py`의 `GMAIL_LABEL`을 고칩니다.
-3. **`paper_processor.py`의 `SYSTEM_PROMPT`를 자기 연구 관심사에 맞게 고칩니다.** 지금 들어 있는 프롬프트는 만든 사람(사회계층론·교육사회학·가족인구학 연구자)의 관심사와 강의 목록을 기준으로 점수를 매기도록 짜여 있습니다. 카테고리 이름을 바꾸면 `database.py`의 `DEFAULT_CATEGORIES`도 같이 바꿉니다.
+1. Put the OAuth client file downloaded from the Google Cloud Console in this folder as `credentials.json`.
+2. Create the Gmail label `논문_알리미` and a filter that applies it to your journal alert emails. To use a different label name, change `GMAIL_LABEL` in `gmail_client.py`.
+3. **Edit `SYSTEM_PROMPT` in `paper_processor.py` to describe your own research interests.** The included prompt scores papers against the author's interests (social stratification, sociology of education, family demography) and course list. If you rename the categories, also update `DEFAULT_CATEGORIES` in `database.py`.
 
-## 실행
+## Running
 
-- 바로가기 만들기: `.venv\Scripts\python.exe create_shortcut.py`. 앱 폴더(`PaperAlert.lnk`)와 시작 메뉴에 만들고, 작업표시줄에 고정한 바로가기가 있으면 같이 고칩니다. 작업표시줄 고정은 앱을 실행한 뒤 아이콘을 오른쪽 클릭해 "작업 표시줄에 고정"을 누릅니다. 이후로는 바로가기로 실행합니다.
-  - 바로가기는 venv의 `Scripts\pythonw.exe`가 아니라 기반 파이썬의 `pythonw.exe`를 실행합니다. uv로 만든 venv의 `pythonw.exe`는 콘솔용 실행 파일이라 터미널 창이 함께 뜨기 때문입니다. venv 패키지는 `launch.pyw`가 직접 불러옵니다.
-  - 바로가기와 앱 창에 같은 앱 ID(`PaperAlert.App.1`)가 붙어 있어 작업표시줄에서 한 아이콘으로 묶입니다. 이미 떠 있을 때 바로가기를 다시 누르면 기존 창이 앞으로 옵니다.
-- 브라우저로 실행: `.venv\Scripts\python.exe app.py` 후 http://localhost:5000
+- Create shortcuts: `.venv\Scripts\python.exe create_shortcut.py`. This creates shortcuts in the app folder (`PaperAlert.lnk`) and the Start menu, and updates a pinned taskbar shortcut if there is one. To pin the app to the taskbar, start it, right-click its taskbar icon, and choose "Pin to taskbar". Use the shortcuts from then on.
+  - The shortcuts run the base Python's `pythonw.exe` rather than the venv's `Scripts\pythonw.exe`, because a venv created by uv contains a console version of `pythonw.exe` that opens a terminal window. `launch.pyw` loads the venv's packages itself.
+  - The shortcuts and the app window share the app ID `PaperAlert.App.1`, so they appear as one taskbar icon. Clicking a shortcut while the app is open brings the existing window to the front.
+- Run in a browser: `.venv\Scripts\python.exe app.py`, then open http://127.0.0.1:5000
 
-처음 **Fetch**를 누르면 브라우저에서 Google 로그인 창이 뜨고, 승인하면 `token.json`이 생깁니다. 오래 쓰지 않아 인증이 만료됐을 때도 같은 로그인 창이 다시 뜹니다.
+The first time you click **Fetch**, a Google sign-in page opens in your browser; after you allow access, `token.json` is created. The same page appears again if access expires.
 
-화면은 영어입니다. 오른쪽 위 **⚙ Settings**에서 요약·데이터·주요 발견을 쓸 언어(Korean / English)를 고를 수 있습니다. 바꾼 언어는 그 뒤에 가져오는 논문부터 적용됩니다. 같은 창에서 기준 날짜(Start date, 이 날짜 이후 받은 메일만 처리), 한 번에 처리할 메일 수(Emails per fetch, 기본 50), 처리 순서(Fetch order)도 정할 수 있습니다.
+Use **⚙ Settings** to choose the summary language, start date, number and order of emails per fetch, batch mode, and the Zotero options. See the [User Manual](MANUAL.md) for details.
 
-## 파일 구성
+## Files
 
-| 파일 | 역할 |
+| File | Role |
 |---|---|
-| `app.py` | Flask 웹앱, 이메일 처리 백그라운드 작업 |
-| `gmail_client.py` | Gmail API 인증과 메일 읽기 |
-| `paper_processor.py` | Claude API로 논문 추출·점수 매기기 (프롬프트 포함) |
-| `database.py` | SQLite 저장·조회 |
-| `zotero_client.py` | Zotero Web API로 논문 추가, 빈 서지 칸 채우기 |
-| `zotero_index.py` | Zotero 라이브러리의 DOI·제목 목록 (이미 있는 논문 확인) |
-| `zotero_targets.py` | Zotero로 보낼 컬렉션 정하기 (루트 / 컬렉션 / 카테고리 / 기준 파일) |
-| `enrich.py` | Crossref·OpenAlex로 DOI·초록 보강 |
-| `batch_processor.py` | 배치 처리 (Message Batches API, 반값) |
-| `version.py` | 버전·제작자 정보 (About 창) |
-| `static/owl.png` | About 창 그림 |
-| `templates/index.html` | 화면(단일 페이지) |
-| `launch.pyw` | pywebview 창과 트레이 아이콘으로 앱을 띄우는 런처 |
-| `create_shortcut.py` | 앱 폴더·시작 메뉴·작업표시줄 바로가기 생성 |
+| `app.py` | Flask web app and background email processing |
+| `gmail_client.py` | Gmail API authorization and email reading |
+| `paper_processor.py` | Article extraction and scoring with the Claude API (includes the research-interest prompt) |
+| `enrich.py` | DOI and abstract lookup via Crossref and OpenAlex |
+| `batch_processor.py` | Batch processing (Message Batches API, half price) |
+| `database.py` | SQLite storage, queries, and settings |
+| `zotero_client.py` | Adding items through the Zotero Web API; filling in missing details |
+| `zotero_index.py` | Local index of DOIs and titles in your Zotero library (duplicate detection) |
+| `zotero_targets.py` | Choosing the Zotero collection (root / one collection / by category / by criteria file) |
+| `version.py` | Version and author information (About window) |
+| `templates/index.html` | The user interface (single page) |
+| `static/owl.png` | Image for the About window |
+| `launch.pyw` | Launcher that opens the app in a pywebview window with a tray icon |
+| `create_shortcut.py` | Creates the app-folder, Start-menu, and taskbar shortcuts |
 
-## 주의
+## Notes
 
-- `.env`, `credentials.json`, `token.json`, `papers.db`에는 개인 키와 자료가 들어가므로 `.gitignore`로 막아 두었습니다. 직접 커밋하지 마세요.
-- 서버는 `127.0.0.1:5000`으로 떠서 이 컴퓨터에서만 접속할 수 있습니다. 같은 네트워크의 다른 기기에서 열려면 `app.py`와 `launch.pyw`의 `host`를 `'0.0.0.0'`으로 바꾸세요(인증이 없으니 공용 와이파이에서는 권하지 않습니다).
-- Claude 모델(`MODEL`, 기본 `claude-sonnet-5-5`)과 생각 깊이(`EFFORT`, 기본 `medium`)는 `paper_processor.py`에서 바꿀 수 있습니다. 응답 형식은 JSON 스키마(`OUTPUT_SCHEMA`)로 고정되고, 관심사 프롬프트는 캐싱됩니다.
+- `.env`, `credentials.json`, `token.json`, and `papers.db` contain private keys and data and are excluded by `.gitignore`. Do not commit them.
+- The server listens on `127.0.0.1:5000`, so only this computer can reach it. To allow other devices on your network, change `host` to `'0.0.0.0'` in `app.py` and `launch.pyw` (there is no authentication, so this is not recommended on public Wi-Fi).
+- The Claude model (`MODEL`, default `claude-sonnet-5-5`) and reasoning effort (`EFFORT`, default `medium`) are set in `paper_processor.py`. Responses are constrained by JSON schemas (`EXTRACT_SCHEMA`, `SCORE_SCHEMA`), and the research-interest prompt is cached.
 
-Claude Code로 만들었습니다(2026년 3~4월).
+Built with Claude Code (first version March–April 2026; version 2.0 in October 2026).
 
-## 라이선스
+## Author
 
-MIT License. 자세한 내용은 [LICENSE](LICENSE)를 보세요.
+Seongsoo Choi, Department of Sociology, Yonsei University (s.choi@yonsei.ac.kr)
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
