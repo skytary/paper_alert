@@ -170,7 +170,7 @@ One collection per line. Indent subcollections by two spaces.
   - Statistical software [QHAE68IS] (36 items) {제외}: Folder for software materials.
 ```
 
-- The text in `[square brackets]` is the Zotero collection key. **Do not change it**; PaperAlert finds collections by key.
+- The text in `[square brackets]` is the Zotero collection key. **It is optional.** Without a key, PaperAlert finds the collection by its path (the names of the line and its parent lines, which must match Zotero exactly), or by its name if only one collection has that name. Add the key only when several collections share a name and the path is ambiguous. If a line has a key, do not change it.
 - The `(n items)` count is for reference only and may be omitted.
 - The text in `{braces}` is the status. The status words are in Korean:
 
@@ -184,7 +184,7 @@ One collection per line. Indent subcollections by two spaces.
 
 - Be specific, for example "studies in which X is the dependent (or independent) variable" or "studies whose main topic or keyword is X".
 - A paper can go into several collections. Claude prefers the most specific subcollection and adds a parent only when the paper also fits the parent's own criterion.
-- When you create a new collection in Zotero, add a line for it. The check in Settings lists collections missing from the file; you can also find a collection's key in the address of the Zotero web library.
+- When you create a new collection in Zotero, add a line for it under its parent, with the same name as in Zotero, for example `  - Text analysis {기준}: studies that use text analysis methods`. No key is needed. The check in Settings lists collections found by name, lines it could not match, and Zotero collections not yet in the file. Changes apply the next time a paper is sent; no restart is needed.
 
 ---
 

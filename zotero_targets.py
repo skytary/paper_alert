@@ -21,7 +21,8 @@ import zotero_client
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_SECONDS = 600
 USABLE_STATES = {'기존', '기준', '초안'}     # 분류 대상으로 쓰는 상태
-LINE_RE = re.compile(r'^(\s*)- (.+?) \[([A-Z0-9]{8})\](?: \(\d+편\))? \{([^}]+)\}:\s*(.*)$')
+# 컬렉션 키([ABCD1234])와 편수((n편) 또는 (n items))는 없어도 됨. 키가 없으면 경로로 Zotero에서 찾음
+LINE_RE = re.compile(r'^(\s*)- (.+?)(?: \[([A-Z0-9]{8})\])?(?: \(\d+[^)]*\))? \{([^}]+)\}:\s*(.*)$')
 
 _collections_cache = {'at': 0.0, 'items': []}
 
@@ -85,6 +86,32 @@ def parse_criteria(path: str) -> list[dict]:
     return entries
 
 
+def resolve_keys(entries: list[dict]) -> list[dict]:
+    """키가 없는 줄은 경로(없으면 이름)가 같은 Zotero 컬렉션의 키로 채움.
+
+    찾으면 e['by_name'] = True, 못 찾거나 같은 이름이 여러 개면 e['key'] = None, e['problem']에 이유.
+    """
+    if all(e['key'] for e in entries):
+        return entries
+    cols = list_collections()
+    by_path = {c['path']: c['key'] for c in cols}
+    by_name = {}
+    for c in cols:
+        by_name.setdefault(c['name'], []).append(c['key'])
+    for e in entries:
+        if e['key']:
+            continue
+        if e['path'] in by_path:
+            e['key'], e['by_name'] = by_path[e['path']], True
+        elif len(by_name.get(e['name'], [])) == 1:
+            e['key'], e['by_name'] = by_name[e['name']][0], True
+        else:
+            n = len(by_name.get(e['name'], []))
+            e['problem'] = ('no Zotero collection with this name' if n == 0 else
+                            f'{n} Zotero collections share this name; add the [key]')
+    return entries
+
+
 def criteria_status(settings: dict | None = None) -> dict:
     """기준 파일 검사 결과: 상태별 개수, Zotero에 없는 키, 파일에 없는 컬렉션."""
     path = criteria_path(settings)
@@ -99,9 +126,13 @@ def criteria_status(settings: dict | None = None) -> dict:
     usable = sum(1 for e in entries if e['state'] in USABLE_STATES)
     result = {'ok': True, 'path': path, 'entries': len(entries), 'usable': usable, 'counts': counts}
     try:
+        entries = resolve_keys(entries)
         zotero = {c['key']: c for c in list_collections()}
-        in_file = {e['key'] for e in entries}
-        result['missing_in_zotero'] = [e['path'] for e in entries if e['key'] not in zotero]
+        in_file = {e['key'] for e in entries if e['key']}
+        result['matched_by_name'] = [e['path'] for e in entries if e.get('by_name')]
+        result['unresolved'] = [f"{e['path']} ({e['problem']})" for e in entries if e.get('problem')]
+        result['missing_in_zotero'] = [e['path'] for e in entries
+                                       if e['key'] and e['key'] not in zotero]
         # 파일에 나온 최상위 폴더 아래에 새로 생긴 컬렉션
         roots = {e['path'].split(' / ')[0] for e in entries}
         result['not_in_file'] = [c['path'] for c in zotero.values()
@@ -131,7 +162,8 @@ CLASSIFY_SCHEMA = {
 
 def classify_by_criteria(paper: dict, settings: dict | None = None) -> list[str]:
     """기준 파일을 보고 Claude가 고른 컬렉션 키 목록. 맞는 곳이 없으면 빈 목록."""
-    entries = [e for e in parse_criteria(criteria_path(settings)) if e['state'] in USABLE_STATES]
+    entries = [e for e in resolve_keys(parse_criteria(criteria_path(settings)))
+               if e['state'] in USABLE_STATES and e['key']]
     allowed = {e['key'] for e in entries}
     listing = '\n'.join(f"[{e['key']}] {e['path']}: {e['text']}" for e in entries)
     paper_text = '\n'.join(f'{label}: {paper.get(field)}' for label, field in [

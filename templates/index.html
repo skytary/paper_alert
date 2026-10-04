@@ -1513,6 +1513,12 @@ async function loadCriteriaInfo() {
   if (!d.ok) { el.style.color = '#dc2626'; el.textContent = d.error; return; }
   el.style.color = '';
   let text = `${d.usable} collections with criteria (${d.entries} lines in the file).`;
+  if (d.matched_by_name && d.matched_by_name.length)
+    text += ` Found by name (no [key] in the file): ${d.matched_by_name.join('; ')}.`;
+  if (d.unresolved && d.unresolved.length) {
+    el.style.color = '#dc2626';
+    text += ` Not found in Zotero: ${d.unresolved.join('; ')}.`;
+  }
   if (d.missing_in_zotero && d.missing_in_zotero.length)
     text += ` ${d.missing_in_zotero.length} are no longer in Zotero.`;
   if (d.not_in_file && d.not_in_file.length)
