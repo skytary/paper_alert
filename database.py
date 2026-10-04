@@ -84,6 +84,7 @@ DEFAULT_SETTINGS = {
     'start_date': '',                 # 이 날짜(YYYY-MM-DD) 이후에 받은 메일만 처리. 빈 값이면 전부
     'batch_size': '50',               # 한 번에 처리할 메일 수. 'all'이면 전부
     'fetch_order': 'newest',          # 처리 순서: newest(최신부터) / oldest(오래된 것부터)
+    'fetch_mode': 'instant',          # instant(바로 처리) / batch(배치 API, 반값, 결과는 몇 분~몇 시간 뒤)
     'zotero_enabled': 'on',           # Zotero 보내기 기능 전체 켜기/끄기
     'zotero_auto_min_score': 'off',   # Fetch 때 이 점수 이상이면 자동으로 보냄. off면 자동 보내기 안 함
     'zotero_existing': 'skip',        # Zotero에 이미 있는 논문: skip(새로 만들지 않음) / fill(빈 서지 칸만 채움)
@@ -98,6 +99,7 @@ SETTING_CHOICES = {
     'summary_language': ['Korean', 'English'],
     'batch_size': ['10', '25', '50', '100', '200', '500', 'all'],
     'fetch_order': ['newest', 'oldest'],
+    'fetch_mode': ['instant', 'batch'],
     'zotero_enabled': ['on', 'off'],
     'zotero_auto_min_score': ['off', '5', '4', '3'],
     'zotero_existing': ['skip', 'fill'],

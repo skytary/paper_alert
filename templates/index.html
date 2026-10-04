@@ -704,6 +704,8 @@
 <header>
   <h1><span>📚</span> PaperAlert</h1>
   <div class="header-right">
+    <span id="batch-info" style="font-size:.78rem;opacity:.85;cursor:pointer;" onclick="checkBatchNow()"
+          title="Click to check batch results now"></span>
     <span id="last-run" style="font-size:.78rem;opacity:.65;"></span>
     <button class="btn btn-settings" onclick="openSettings()" title="Settings">⚙ Settings</button>
     <button class="btn btn-primary" id="process-btn" onclick="startProcessing()">
@@ -859,6 +861,13 @@
         </div>
         <select id="setting-fetch_order" onchange="saveSetting('fetch_order', this.value)"></select>
       </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Fetch mode</div>
+          <div class="settings-help">"Batch" processes emails at half price, but results arrive later (usually within an hour, at most 24 hours) in two rounds. PaperAlert checks every minute while it is open, and picks up where it left off after a restart. Good for large backlogs.</div>
+        </div>
+        <select id="setting-fetch_mode" onchange="saveSetting('fetch_mode', this.value)"></select>
+      </div>
       <div class="settings-help" id="pending-info" style="margin-top:10px;"></div>
       <div class="settings-row" style="margin-top:12px;">
         <div>
@@ -963,6 +972,8 @@ const SCORE_LABELS = ['', 'Skip', 'Low', 'Moderate', 'High', 'Must read'];
 document.addEventListener('DOMContentLoaded', async () => {
   allCategories = await fetch('/api/categories').then(r => r.json());
   appSettings = (await fetch('/api/settings').then(r => r.json())).settings;
+  loadBatchInfo();
+  setInterval(loadBatchInfo, 60000);
   populateCatFilterDropdown();
   await loadStats();
   await loadPapers();
@@ -1274,6 +1285,36 @@ async function savePaperCategories(paperId) {
 }
 
 // ─── Category Manager Modal ────────────────────────────────────────────── //
+// ─── Batch ─────────────────────────────────────────────────────────────── //
+let lastBatchEmails = 0;
+
+function showBatchInfo(d) {
+  const el = document.getElementById('batch-info');
+  if (d.emails > 0) {
+    el.textContent = `⏳ Batch: ${d.emails} emails in progress`
+      + ` (step 1: ${d.extract}, step 2: ${d.score})`;
+  } else {
+    el.textContent = '';
+  }
+  el.title = (d.last_message || 'Click to check batch results now')
+    + (d.last_check ? `\nLast checked: ${d.last_check}` : '');
+  // 처리 중이던 메일이 줄었으면 새로 저장된 논문이 있을 수 있으니 목록 갱신
+  if (d.emails < lastBatchEmails) { loadStats(); loadPapers(); }
+  lastBatchEmails = d.emails;
+}
+
+async function loadBatchInfo() {
+  try { showBatchInfo(await fetch('/api/batch').then(r => r.json())); } catch (e) {}
+}
+
+async function checkBatchNow() {
+  const el = document.getElementById('batch-info');
+  if (!el.textContent) return;
+  el.textContent = '⏳ Checking batch...';
+  try { showBatchInfo(await fetch('/api/batch/check', { method: 'POST' }).then(r => r.json())); }
+  catch (e) { loadBatchInfo(); }
+}
+
 // ─── Zotero ────────────────────────────────────────────────────────────── //
 async function sendToZotero(paperId, btn) {
   btn.disabled = true;
@@ -1307,6 +1348,7 @@ function openInZotero(key) {
 const SETTING_LABELS = {
   batch_size: { all: 'All' },
   fetch_order: { newest: 'Newest first', oldest: 'Oldest first' },
+  fetch_mode: { instant: 'Instant', batch: 'Batch (half price, slower)' },
   zotero_enabled: { on: 'On', off: 'Off' },
   zotero_auto_min_score: { off: 'Off', '5': 'Score 5', '4': 'Score 4 or higher', '3': 'Score 3 or higher' },
   zotero_existing: { skip: "Skip (don't change it)", fill: 'Fill in missing details' },
@@ -1666,6 +1708,7 @@ async function checkStatus() {
       spinner.style.display = 'none';
       setBannerButton(true);
       if (s.last_run) document.getElementById('last-run').textContent = 'Last fetch: ' + s.last_run;
+      loadBatchInfo();   // 배치로 보냈으면 헤더에 진행 상황 표시
       if (s.errors && s.errors.length > 0) {
         document.getElementById('error-list').classList.add('visible');
         document.getElementById('error-items').innerHTML = s.errors.map(e => `<li>${esc(e)}</li>`).join('');

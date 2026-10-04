@@ -22,10 +22,12 @@ import paper_processor
 import zotero_client
 import zotero_index
 import zotero_targets
+import batch_processor
 
 app = Flask(__name__)
 database.init_db()
 zotero_index.init_tables()
+batch_processor.init_tables()
 
 # ── 처리 상태 ─────────────────────────────────────────────────────────── #
 _status = {
@@ -167,6 +169,40 @@ def get_zotero_collections():
 @app.route('/api/zotero/criteria', methods=['GET'])
 def get_zotero_criteria():
     return jsonify(zotero_targets.criteria_status())
+
+
+def auto_send_to_zotero(new_ids: list[tuple[int, int]], errors: list | None = None) -> int:
+    """새로 저장한 논문 중 설정한 점수 이상을 Zotero로 보냄. 보낸 편수를 돌려줌."""
+    settings = database.get_settings()
+    min_score = settings['zotero_auto_min_score']
+    if settings['zotero_enabled'] != 'on' or min_score == 'off':
+        return 0
+    sent = 0
+    for paper_id, score in new_ids:
+        if score >= int(min_score):
+            try:
+                send_paper_to_zotero(paper_id)
+                sent += 1
+            except Exception as e:
+                if errors is not None:
+                    errors.append(f'Zotero send failed (paper {paper_id}): {e}')
+    return sent
+
+
+# ── 배치 처리 ─────────────────────────────────────────────────────────────── #
+
+@app.route('/api/batch', methods=['GET'])
+def get_batch():
+    return jsonify(batch_processor.summary())
+
+
+@app.route('/api/batch/check', methods=['POST'])
+def post_batch_check():
+    try:
+        batch_processor.poll(lambda ids: auto_send_to_zotero(ids, batch_processor.state['errors']))
+        return jsonify(batch_processor.summary())
+    except Exception as e:
+        return jsonify({'error': str(e), **batch_processor.summary()}), 500
 
 
 @app.route('/api/zotero/index', methods=['GET'])
@@ -322,6 +358,20 @@ def _process_emails_background():
             )
             return
 
+        if settings['fetch_mode'] == 'batch':
+            def progress(i, n):
+                update_status(current=i, message=f'Loading emails for the batch ({i}/{n})...')
+            sent = batch_processor.submit(email_ids, progress)
+            update_status(
+                message=f'Submitted {sent} emails as a batch (half price). Results usually arrive '
+                        f'within an hour; PaperAlert checks every minute while it is open.'
+                        + (f' {left_after} emails are still waiting.' if left_after else ''),
+                is_processing=False,
+                errors=list(batch_processor.state['errors'][-5:]),
+                last_run=_now(),
+            )
+            return
+
         saved_total = 0
         skipped_total = 0
         sent_total = 0
@@ -374,16 +424,7 @@ def _process_emails_background():
                         new_ids.append((paper_id, p.get('interest_score') or 0))
 
                 # 설정한 점수 이상이면 Zotero로 자동 보내기 (실패해도 메일 처리는 계속)
-                settings_now = database.get_settings()
-                min_score = settings_now['zotero_auto_min_score']
-                if settings_now['zotero_enabled'] == 'on' and min_score != 'off':
-                    for paper_id, score in new_ids:
-                        if score >= int(min_score):
-                            try:
-                                send_paper_to_zotero(paper_id)
-                                sent_total += 1
-                            except Exception as e:
-                                errors.append(f'Zotero send failed (paper {paper_id}): {e}')
+                sent_total += auto_send_to_zotero(new_ids, errors)
 
                 # 성공 후 읽음 처리 + 처리 완료 기록
                 gmail_client.mark_email_read(email_id)
@@ -422,7 +463,8 @@ def _pending_email_ids(settings: dict) -> list[str]:
 
     Gmail은 최신 메일부터 돌려주므로, 'oldest' 설정이면 순서를 뒤집는다.
     """
-    done = database.processed_email_ids()
+    # 이미 처리했거나 지금 배치로 처리 중인 메일은 뺌
+    done = database.processed_email_ids() | batch_processor.active_email_ids()
     ids = [i for i in gmail_client.list_unread_email_ids(settings['start_date']) if i not in done]
     return ids[::-1] if settings['fetch_order'] == 'oldest' else ids
 
@@ -437,6 +479,10 @@ def _now() -> str:
 def _open_browser():
     time.sleep(1.5)
     webbrowser.open('http://127.0.0.1:5000')
+
+
+# 앱이 켜져 있는 동안 1분마다 배치 결과를 확인
+batch_processor.start_poller(lambda ids: auto_send_to_zotero(ids, batch_processor.state['errors']))
 
 
 if __name__ == '__main__':

@@ -245,45 +245,90 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
+def request_params(system: str, user: str, schema: dict, effort: str) -> dict:
+    """Messages API 요청 내용. 바로 처리(_call)와 배치 처리(batch_processor)가 같이 씀."""
+    return {
+        'model': MODEL,
+        'max_tokens': MAX_TOKENS,
+        # 시스템 프롬프트 캐싱: 두 번째 호출부터 이 부분 비용이 약 1/10
+        'system': [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        'messages': [{"role": "user", "content": user}],
+        'output_config': {"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+    }
+
+
+def parse_response(message, label: str) -> dict:
+    """응답에서 JSON을 꺼냄. 잘리거나(max_tokens) 거절되면 예외."""
+    if message.stop_reason == 'max_tokens':
+        raise RuntimeError(f'Response cut off at the {MAX_TOKENS}-token limit: {label}')
+    if message.stop_reason == 'refusal':
+        raise RuntimeError(f'Claude declined to process: {label}')
+    text = next((b.text for b in message.content if b.type == 'text'), '')
+    return json.loads(text)
+
+
 def _call(system: str, user: str, schema: dict, effort: str, label: str) -> dict:
-    """Claude를 한 번 호출해 스키마에 맞는 JSON을 돌려받음.
+    """Claude를 한 번 바로 호출해 스키마에 맞는 JSON을 돌려받음.
 
     응답이 잘리거나(max_tokens) 거절되면 예외를 일으킨다. 호출하는 쪽은 그 메일을
     처리 완료로 기록하지 않으므로 다음 실행 때 다시 시도된다.
     """
     with _get_client().messages.stream(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        # 시스템 프롬프트 캐싱: 두 번째 호출부터 이 부분 비용이 약 1/10
-        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": user}],
-        output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
-        # 안전 분류기가 요청을 거절하면 서버가 다른 모델로 자동 재시도
+        **request_params(system, user, schema, effort),
+        # 안전 분류기가 요청을 거절하면 서버가 다른 모델로 자동 재시도 (배치 API에서는 쓸 수 없음)
         extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
         extra_body={"fallbacks": "default"},
     ) as stream:
         response = stream.get_final_message()
-
-    if response.stop_reason == 'max_tokens':
-        raise RuntimeError(f'Response cut off at the {MAX_TOKENS}-token limit: {label}')
-    if response.stop_reason == 'refusal':
-        raise RuntimeError(f'Claude declined to process: {label}')
-    text = next((b.text for b in response.content if b.type == 'text'), '')
-    return json.loads(text)
+    return parse_response(response, label)
 
 
-def extract_papers(email_content: dict) -> list[dict]:
-    """1단계: 메일에 실린 논문 목록(제목·저자·학술지·연도·링크)만 뽑음."""
+# ── 1단계: 논문 목록 뽑기 ─────────────────────────────────────────────────── #
+
+def extract_request(email_content: dict) -> tuple:
+    """(system, user, schema, effort)"""
     subject = email_content.get('subject', '')
     user = f"Email Subject: {subject}\n\nEmail Body:\n{email_content.get('body', '')}"
-    papers = _call(EXTRACT_PROMPT, user, EXTRACT_SCHEMA, 'low', subject[:60])['papers']
+    return EXTRACT_PROMPT, user, EXTRACT_SCHEMA, 'low'
+
+
+def parse_extract(result: dict) -> list[dict]:
+    papers = result['papers']
     for p in papers:
         p['title'] = (p.get('title') or '').strip()
     return [p for p in papers if p['title']]
 
 
-def score_papers(papers: list[dict], email_content: dict, language: str = 'Korean') -> list[dict]:
-    """2단계: 논문마다 점수·요약을 매김. 초록은 보강 단계에서 찾은 것을 붙여 보냄."""
+def extract_papers(email_content: dict) -> list[dict]:
+    """1단계: 메일에 실린 논문 목록(제목·저자·학술지·연도·링크)만 뽑음."""
+    label = email_content.get('subject', '')[:60]
+    return parse_extract(_call(*extract_request(email_content), label))
+
+
+# ── 보강과 중복 거르기 ───────────────────────────────────────────────────── #
+
+def enrich_and_dedupe(papers: list[dict], skip_existing: bool = True) -> tuple[list[dict], int]:
+    """DOI·초록 보강 후 DB에 이미 있는 논문을 거름. (새 논문, 건너뛴 편수)"""
+    papers = [enrich.enrich(p) for p in papers]
+    if not skip_existing:
+        return papers, 0
+    keys = database.existing_keys()
+    new, skipped = [], 0
+    for p in papers:
+        if database.is_duplicate(p, keys):
+            skipped += 1
+            continue
+        # 같은 메일 안의 중복도 거름
+        keys[0].add((p.get('doi') or '').lower())
+        keys[1].add(database.norm_title(p['title']))
+        new.append(p)
+    return new, skipped
+
+
+# ── 2단계: 평가 ──────────────────────────────────────────────────────────── #
+
+def score_request(papers: list[dict], email_content: dict, language: str = 'Korean') -> tuple:
+    """(system, user, schema, effort). 초록은 보강 단계에서 찾은 것을 붙여 보냄."""
     lines = []
     for i, p in enumerate(papers, 1):
         lines.append(f"[{i}] Title: {p['title']}")
@@ -297,13 +342,18 @@ def score_papers(papers: list[dict], email_content: dict, language: str = 'Korea
             + "Papers to score:\n\n" + "\n".join(lines)
             + f"\n\n--- Original alert email (context) ---\nSubject: {subject}\n\n"
             + email_content.get('body', ''))
-    results = _call(SYSTEM_PROMPT, user, SCORE_SCHEMA, EFFORT, subject[:60])['results']
+    return SYSTEM_PROMPT, user, SCORE_SCHEMA, EFFORT
 
-    by_index = {r['index']: r for r in results}
+
+def merge_scores(papers: list[dict], result: dict, email_content: dict) -> list[dict]:
+    """평가 결과를 논문에 붙이고 메일 정보를 더함. 빠진 논문이 있으면 예외."""
+    subject = email_content.get('subject', '')
+    by_index = {r['index']: r for r in result['results']}
     missing = [i for i in range(1, len(papers) + 1) if i not in by_index]
     if missing:
         raise RuntimeError(f'Scores missing for {len(missing)} papers: {subject[:60]}')
 
+    now = datetime.now().isoformat()
     scored = []
     for i, p in enumerate(papers, 1):
         r = by_index[i]
@@ -316,41 +366,29 @@ def score_papers(papers: list[dict], email_content: dict, language: str = 'Korea
             'field_data': r['field_data'],
             'key_findings': r['key_findings'],
             'relevance_category': ', '.join(cats) or None,
+            'email_id': email_content['id'],
+            'email_subject': subject,
+            'email_received_at': email_content.get('received_at', ''),
+            'processed_at': now,
         })
     return scored
 
 
+def score_papers(papers: list[dict], email_content: dict, language: str = 'Korean') -> list[dict]:
+    """2단계: 논문마다 점수·요약을 매김."""
+    label = email_content.get('subject', '')[:60]
+    result = _call(*score_request(papers, email_content, language), label)
+    return merge_scores(papers, result, email_content)
+
+
 def process_email(email_content: dict, skip_existing: bool = True,
                   language: str | None = None) -> tuple[list[dict], int]:
-    """메일 한 통 처리: 목록 뽑기 → DOI·초록 보강 → 이미 있는 논문 건너뛰기 → 평가.
+    """메일 한 통 바로 처리: 목록 뽑기 → DOI·초록 보강 → 이미 있는 논문 건너뛰기 → 평가.
 
     반환값은 (저장할 논문 목록, 이미 DB에 있어 건너뛴 편수).
     """
-    papers = [enrich.enrich(p) for p in extract_papers(email_content)]
-
-    skipped = 0
-    if skip_existing:
-        keys = database.existing_keys()
-        new = []
-        for p in papers:
-            if database.is_duplicate(p, keys):
-                skipped += 1
-                continue
-            # 같은 메일 안의 중복도 거름
-            keys[0].add((p.get('doi') or '').lower())
-            keys[1].add(database.norm_title(p['title']))
-            new.append(p)
-        papers = new
-
+    papers, skipped = enrich_and_dedupe(extract_papers(email_content), skip_existing)
     if not papers:
         return [], skipped
-
     language = language or database.get_settings()['summary_language']
-    scored = score_papers(papers, email_content, language)
-    now = datetime.now().isoformat()
-    for p in scored:
-        p['email_id'] = email_content['id']
-        p['email_subject'] = email_content.get('subject', '')
-        p['email_received_at'] = email_content.get('received_at', '')
-        p['processed_at'] = now
-    return scored, skipped
+    return score_papers(papers, email_content, language), skipped
