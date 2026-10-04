@@ -20,9 +20,11 @@ import enrich
 import gmail_client
 import paper_processor
 import zotero_client
+import zotero_index
 
 app = Flask(__name__)
 database.init_db()
+zotero_index.init_tables()
 
 # ── 처리 상태 ─────────────────────────────────────────────────────────── #
 _status = {
@@ -111,25 +113,56 @@ def cancel_processing():
 
 # ── Zotero ──────────────────────────────────────────────────────────────── #
 
-def send_paper_to_zotero(paper_id: int) -> str:
-    """논문 하나를 Zotero로 보내고 항목 키를 돌려줌. 이미 보낸 논문이면 기존 키를 돌려줌.
+def send_paper_to_zotero(paper_id: int) -> dict:
+    """논문 하나를 Zotero로 보냄. {'zotero_key', 'existing', 'filled'}를 돌려줌.
 
     DOI가 없으면 보내기 전에 Crossref/OpenAlex로 찾아 DB에도 채운다.
+    Zotero에 이미 있으면(DOI 또는 제목) 새로 만들지 않고, 설정에 따라 빈 서지 칸만 채운다.
     """
     paper = database.get_paper_by_id(paper_id)
     if paper is None:
         raise ValueError('Paper not found.')
     if paper.get('added_to_zotero') and paper.get('zotero_key'):
-        return paper['zotero_key']
+        return {'zotero_key': paper['zotero_key'], 'existing': True, 'filled': []}
     if not paper.get('doi'):
         found = enrich.enrich(paper)
         if found.get('doi'):
             database.update_paper_metadata(paper_id, found.get('doi'), found.get('abstract'),
                                            found.get('year'))
             paper = database.get_paper_by_id(paper_id)
+
+    # 이미 Zotero에 있는지 확인 (목록이 아직 없으면 백그라운드로 만들기 시작하고 이번에는 확인 없이 보냄)
+    if zotero_index.is_built():
+        zotero_index.refresh_if_stale()
+        existing = zotero_index.find(paper)
+    else:
+        if not zotero_index.status['running']:
+            zotero_index.sync_in_background()
+        existing = None
+
+    if existing:
+        filled = []
+        if database.get_settings()['zotero_existing'] == 'fill':
+            filled = zotero_client.fill_missing(existing, paper)
+        database.mark_paper_in_zotero(paper_id, existing)
+        return {'zotero_key': existing, 'existing': True, 'filled': filled}
+
     key = zotero_client.add_paper(paper)
+    zotero_index.add(key, paper)
     database.mark_paper_in_zotero(paper_id, key)
-    return key
+    return {'zotero_key': key, 'existing': False, 'filled': []}
+
+
+@app.route('/api/zotero/index', methods=['GET'])
+def get_zotero_index():
+    return jsonify(zotero_index.info())
+
+
+@app.route('/api/zotero/index/sync', methods=['POST'])
+def post_zotero_index_sync():
+    if not zotero_index.status['running']:
+        zotero_index.sync_in_background(force_full=bool((request.json or {}).get('full')))
+    return jsonify(zotero_index.info())
 
 
 @app.route('/api/zotero/open/<key>', methods=['POST'])
@@ -149,7 +182,7 @@ def post_paper_to_zotero(paper_id):
     if database.get_settings()['zotero_enabled'] != 'on':
         return jsonify({'error': 'Zotero is turned off in Settings.'}), 400
     try:
-        return jsonify({'success': True, 'zotero_key': send_paper_to_zotero(paper_id)})
+        return jsonify({'success': True, **send_paper_to_zotero(paper_id)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

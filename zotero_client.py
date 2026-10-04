@@ -69,7 +69,9 @@ def build_item(paper: dict, collections: list[str] | None = None) -> dict:
         'creators': _creators_from_crossref(cr) or _creators_from_text(paper.get('authors')),
         'abstractNote': re.sub(r'^(Abstract|ABSTRACT)[:.]?\s+', '', paper.get('abstract') or ''),
         'publicationTitle': first('container-title') or paper.get('journal') or '',
-        'journalAbbreviation': first('short-container-title'),
+        # Crossref가 약칭 자리에 전체 이름을 주는 경우가 많아, 전체 이름과 다를 때만 씀
+        'journalAbbreviation': ('' if first('short-container-title') == first('container-title')
+                                else first('short-container-title')),
         'volume': cr.get('volume', ''),
         'issue': cr.get('issue', ''),
         'pages': cr.get('page', ''),
@@ -108,6 +110,31 @@ def _post(url: str, headers: dict, objects: list[dict]) -> dict:
     failed = list((result.get('failed') or {}).values())
     message = failed[0].get('message', 'unknown error') if failed else 'unexpected response'
     raise ValueError(f'Zotero rejected the item: {message}')
+
+
+FILLABLE = ['DOI', 'abstractNote', 'publicationTitle', 'journalAbbreviation', 'volume', 'issue',
+            'pages', 'date', 'ISSN', 'url']
+
+
+def fill_missing(key: str, paper: dict) -> list[str]:
+    """이미 있는 Zotero 항목에서 비어 있는 서지 칸만 채움. 채운 칸 이름 목록을 돌려줌.
+
+    이미 값이 있는 칸, 저자(이미 있으면), 태그, 메모, 첨부, 컬렉션은 건드리지 않는다.
+    """
+    base, headers = _config()
+    r = requests.get(f'{base}/items/{key}', headers=headers, timeout=TIMEOUT)
+    r.raise_for_status()
+    current = r.json()['data']
+    new = build_item(paper)
+    patch = {f: new[f] for f in FILLABLE
+             if f in current and not str(current.get(f) or '').strip() and new.get(f)}
+    if not current.get('creators') and new.get('creators'):
+        patch['creators'] = new['creators']
+    if patch:
+        r = requests.patch(f'{base}/items/{key}', json=patch, timeout=TIMEOUT,
+                           headers={**headers, 'If-Unmodified-Since-Version': str(current['version'])})
+        r.raise_for_status()
+    return list(patch)
 
 
 def add_paper(paper: dict, collections: list[str] | None = None) -> str:

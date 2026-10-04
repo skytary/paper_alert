@@ -871,6 +871,20 @@
         </div>
         <select id="setting-zotero_auto_min_score" onchange="saveSetting('zotero_auto_min_score', this.value)"></select>
       </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">If already in Zotero</div>
+          <div class="settings-help">A paper counts as already in Zotero when its DOI or title matches an item in your library. Either way no duplicate is created. "Fill in" adds only details that are empty in Zotero (DOI, abstract, volume, pages...); tags, notes, and attachments are never changed.</div>
+        </div>
+        <select id="setting-zotero_existing" onchange="saveSetting('zotero_existing', this.value)"></select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Zotero library index</div>
+          <div class="settings-help" id="zotero-index-info">Loading...</div>
+        </div>
+        <button class="btn-ghost" onclick="syncZoteroIndex()">Sync now</button>
+      </div>
       <div class="settings-saved" id="settings-saved"></div>
     </div>
   </div>
@@ -1228,9 +1242,13 @@ async function sendToZotero(paperId, btn) {
     const res = await fetch(`/api/papers/${paperId}/zotero`, { method: 'POST' });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    btn.textContent = '✓ In Zotero';
+    btn.textContent = data.existing ? '✓ Already in Zotero' : '✓ In Zotero';
     btn.classList.add('zotero-done');
-    btn.title = 'Already in Zotero — click to show it in the Zotero app';
+    btn.title = data.existing
+      ? 'This paper was already in your Zotero library, so no new item was created'
+        + (data.filled && data.filled.length ? ` (filled in: ${data.filled.join(', ')})` : '')
+        + ' — click to show it in the Zotero app'
+      : 'Added to Zotero — click to show it in the Zotero app';
     btn.onclick = () => openInZotero(data.zotero_key);
     btn.disabled = false;
   } catch (e) {
@@ -1251,7 +1269,38 @@ const SETTING_LABELS = {
   fetch_order: { newest: 'Newest first', oldest: 'Oldest first' },
   zotero_enabled: { on: 'On', off: 'Off' },
   zotero_auto_min_score: { off: 'Off', '5': 'Score 5', '4': 'Score 4 or higher', '3': 'Score 3 or higher' },
+  zotero_existing: { skip: "Skip (don't change it)", fill: 'Fill in missing details' },
 };
+
+let zoteroIndexTimer = null;
+
+async function loadZoteroIndexInfo() {
+  const el = document.getElementById('zotero-index-info');
+  try {
+    const d = await fetch('/api/zotero/index').then(r => r.json());
+    if (d.running) {
+      el.textContent = d.total ? `Syncing... ${d.done.toLocaleString()} / ${d.total.toLocaleString()}` : 'Syncing...';
+    } else if (d.error) {
+      el.textContent = 'Sync failed: ' + d.error;
+    } else if (d.version > 0) {
+      el.textContent = `${d.items.toLocaleString()} items, last synced ${d.last_sync}. Used to detect papers already in your library.`;
+    } else {
+      el.textContent = 'Not built yet. It is built automatically the first time you send a paper (takes a few minutes), or click "Sync now".';
+    }
+    // 동기화 중이면 설정 창이 열려 있는 동안 진행 상황을 갱신
+    clearTimeout(zoteroIndexTimer);
+    if (d.running && !document.getElementById('settings-modal').classList.contains('hidden')) {
+      zoteroIndexTimer = setTimeout(loadZoteroIndexInfo, 2000);
+    }
+  } catch (e) { el.textContent = ''; }
+}
+
+async function syncZoteroIndex() {
+  await fetch('/api/zotero/index/sync', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  });
+  loadZoteroIndexInfo();
+}
 
 async function openSettings() {
   const data = await fetch('/api/settings').then(r => r.json());
@@ -1266,6 +1315,7 @@ async function openSettings() {
   document.getElementById('settings-saved').textContent = '';
   document.getElementById('settings-modal').classList.remove('hidden');
   loadPendingInfo();
+  loadZoteroIndexInfo();
 }
 
 async function loadPendingInfo() {
