@@ -21,6 +21,7 @@ import gmail_client
 import paper_processor
 import zotero_client
 import zotero_index
+import zotero_targets
 
 app = Flask(__name__)
 database.init_db()
@@ -147,10 +148,25 @@ def send_paper_to_zotero(paper_id: int) -> dict:
         database.mark_paper_in_zotero(paper_id, existing)
         return {'zotero_key': existing, 'existing': True, 'filled': filled}
 
-    key = zotero_client.add_paper(paper)
+    # 보낼 컬렉션 (설정의 보낼 곳 방식). 이미 있는 항목은 최쌤이 정리한 위치를 존중해 옮기지 않음
+    collections = zotero_targets.resolve(paper)
+    key = zotero_client.add_paper(paper, collections)
     zotero_index.add(key, paper)
     database.mark_paper_in_zotero(paper_id, key)
-    return {'zotero_key': key, 'existing': False, 'filled': []}
+    return {'zotero_key': key, 'existing': False, 'filled': [], 'collections': collections}
+
+
+@app.route('/api/zotero/collections', methods=['GET'])
+def get_zotero_collections():
+    try:
+        return jsonify(zotero_targets.list_collections(refresh=request.args.get('refresh') == '1'))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zotero/criteria', methods=['GET'])
+def get_zotero_criteria():
+    return jsonify(zotero_targets.criteria_status())
 
 
 @app.route('/api/zotero/index', methods=['GET'])

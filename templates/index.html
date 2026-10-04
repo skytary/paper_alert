@@ -94,6 +94,9 @@
     .settings-row .settings-label { font-weight: 600; font-size: .9rem; }
     .settings-row .settings-help { color: var(--c-muted); font-size: .78rem; margin-top: 2px; }
     .settings-saved { color: #16a34a; font-size: .8rem; min-height: 1.2em; margin-top: 8px; }
+    .collection-select { max-width: 320px; }
+    #settings-modal .modal { width: 680px; }
+    #settings-modal .modal-body { overflow-y: auto; }
 
     /* ── Status Banner ── */
     #status-banner {
@@ -880,6 +883,43 @@
       </div>
       <div class="settings-row">
         <div>
+          <div class="settings-label">Where to send</div>
+          <div class="settings-help">Which Zotero collection a newly added paper goes into. Papers already in Zotero stay where they are.</div>
+        </div>
+        <select id="setting-zotero_target_mode" onchange="saveSetting('zotero_target_mode', this.value); showTargetOptions()"></select>
+      </div>
+      <div class="settings-row target-opt" data-modes="collection">
+        <div>
+          <div class="settings-label">Collection</div>
+          <div class="settings-help">Every paper goes into this collection.</div>
+        </div>
+        <select class="collection-select" id="setting-zotero_target_collection" onchange="saveSetting('zotero_target_collection', this.value)"></select>
+      </div>
+      <div class="target-opt" data-modes="rules" style="padding:10px 0;border-bottom:1px solid var(--c-border,#e5e7eb);">
+        <div class="settings-label">Collection for each category</div>
+        <div class="settings-help">A paper with several categories goes into each matching collection.</div>
+        <div id="rules-table" style="margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;"></div>
+      </div>
+      <div class="settings-row target-opt" data-modes="criteria">
+        <div style="flex:1;min-width:0;">
+          <div class="settings-label">Criteria file</div>
+          <div class="settings-help">Claude reads this file and picks the collections whose criteria fit the paper (about one cent per paper).</div>
+          <div class="settings-help" id="criteria-info" style="margin-top:4px;"></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="setting-zotero_criteria_file" style="width:180px;">
+          <button class="btn-ghost" onclick="saveCriteriaFile()">Save</button>
+        </div>
+      </div>
+      <div class="settings-row target-opt" data-modes="rules criteria">
+        <div>
+          <div class="settings-label">If nothing fits</div>
+          <div class="settings-help">Where a paper goes when no category or criterion matches.</div>
+        </div>
+        <select class="collection-select" id="setting-zotero_fallback_collection" onchange="saveSetting('zotero_fallback_collection', this.value)"></select>
+      </div>
+      <div class="settings-row">
+        <div>
           <div class="settings-label">Zotero library index</div>
           <div class="settings-help" id="zotero-index-info">Loading...</div>
         </div>
@@ -1270,7 +1310,78 @@ const SETTING_LABELS = {
   zotero_enabled: { on: 'On', off: 'Off' },
   zotero_auto_min_score: { off: 'Off', '5': 'Score 5', '4': 'Score 4 or higher', '3': 'Score 3 or higher' },
   zotero_existing: { skip: "Skip (don't change it)", fill: 'Fill in missing details' },
+  zotero_target_mode: {
+    root: 'Library root', collection: 'One collection',
+    rules: 'By category', criteria: 'By criteria file (Claude)',
+  },
 };
+
+let zoteroCollections = null;   // [{key, path}] 설정 창을 처음 열 때 불러옴
+
+// 보낼 곳 방식에 맞는 설정 줄만 보여 줌
+function showTargetOptions() {
+  const mode = document.getElementById('setting-zotero_target_mode').value;
+  document.querySelectorAll('.target-opt').forEach(el => {
+    el.style.display = el.dataset.modes.split(' ').includes(mode) ? '' : 'none';
+  });
+  if (mode === 'criteria') loadCriteriaInfo();
+}
+
+async function loadTargetSettings() {
+  const s = appSettings;
+  document.getElementById('setting-zotero_criteria_file').value = s.zotero_criteria_file || '';
+  showTargetOptions();
+  if (!zoteroCollections) {
+    const res = await fetch('/api/zotero/collections').then(r => r.json());
+    if (res.error) {
+      document.querySelectorAll('.collection-select').forEach(sel => {
+        sel.innerHTML = '<option value="">Could not load collections</option>';
+      });
+      return;
+    }
+    zoteroCollections = res;
+  }
+  const options = (emptyLabel) => `<option value="">${esc(emptyLabel)}</option>` +
+    zoteroCollections.map(c => `<option value="${esc(c.key)}">${esc(c.path)}</option>`).join('');
+  const target = document.getElementById('setting-zotero_target_collection');
+  target.innerHTML = options('(choose a collection)');
+  target.value = s.zotero_target_collection || '';
+  const fallback = document.getElementById('setting-zotero_fallback_collection');
+  fallback.innerHTML = options('Library root');
+  fallback.value = s.zotero_fallback_collection || '';
+
+  const rules = JSON.parse(s.zotero_rules || '{}');
+  document.getElementById('rules-table').innerHTML = allCategories.map((cat, i) =>
+    `<span style="font-size:.85rem;">${esc(cat)}</span>
+     <select class="collection-select rule-select" data-cat="${esc(cat)}" onchange="saveRules()">${options('(none)')}</select>`
+  ).join('');
+  document.querySelectorAll('.rule-select').forEach(sel => { sel.value = rules[sel.dataset.cat] || ''; });
+}
+
+function saveRules() {
+  const rules = {};
+  document.querySelectorAll('.rule-select').forEach(sel => { if (sel.value) rules[sel.dataset.cat] = sel.value; });
+  saveSetting('zotero_rules', JSON.stringify(rules));
+}
+
+async function saveCriteriaFile() {
+  await saveSetting('zotero_criteria_file', document.getElementById('setting-zotero_criteria_file').value.trim());
+  loadCriteriaInfo();
+}
+
+async function loadCriteriaInfo() {
+  const el = document.getElementById('criteria-info');
+  el.textContent = 'Checking the file...';
+  const d = await fetch('/api/zotero/criteria').then(r => r.json());
+  if (!d.ok) { el.style.color = '#dc2626'; el.textContent = d.error; return; }
+  el.style.color = '';
+  let text = `${d.usable} collections with criteria (${d.entries} lines in the file).`;
+  if (d.missing_in_zotero && d.missing_in_zotero.length)
+    text += ` ${d.missing_in_zotero.length} are no longer in Zotero.`;
+  if (d.not_in_file && d.not_in_file.length)
+    text += ` ${d.not_in_file.length} Zotero collections are not in the file yet: ${d.not_in_file.slice(0, 3).join('; ')}${d.not_in_file.length > 3 ? '...' : ''}`;
+  el.textContent = text;
+}
 
 let zoteroIndexTimer = null;
 
@@ -1314,8 +1425,10 @@ async function openSettings() {
   document.getElementById('setting-start_date').value = data.settings.start_date || '';
   document.getElementById('settings-saved').textContent = '';
   document.getElementById('settings-modal').classList.remove('hidden');
+  appSettings = data.settings;
   loadPendingInfo();
   loadZoteroIndexInfo();
+  loadTargetSettings();
 }
 
 async function loadPendingInfo() {

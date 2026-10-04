@@ -1,4 +1,5 @@
 """SQLite 데이터베이스 관리 모듈"""
+import json
 import re
 import sqlite3
 import unicodedata
@@ -86,6 +87,12 @@ DEFAULT_SETTINGS = {
     'zotero_enabled': 'on',           # Zotero 보내기 기능 전체 켜기/끄기
     'zotero_auto_min_score': 'off',   # Fetch 때 이 점수 이상이면 자동으로 보냄. off면 자동 보내기 안 함
     'zotero_existing': 'skip',        # Zotero에 이미 있는 논문: skip(새로 만들지 않음) / fill(빈 서지 칸만 채움)
+    # 보낼 곳 (zotero_targets.py 참고)
+    'zotero_target_mode': 'root',     # root / collection / rules / criteria
+    'zotero_target_collection': '',   # collection 방식의 컬렉션 키
+    'zotero_rules': '{}',             # rules 방식: {"카테고리": "컬렉션 키"} JSON
+    'zotero_criteria_file': 'zotero_분류기준.md',   # criteria 방식의 기준 파일 (앱 폴더 기준 상대 경로 가능)
+    'zotero_fallback_collection': '', # rules·criteria에서 맞는 곳이 없을 때 컬렉션 키 (비면 루트)
 }
 SETTING_CHOICES = {
     'summary_language': ['Korean', 'English'],
@@ -94,6 +101,7 @@ SETTING_CHOICES = {
     'zotero_enabled': ['on', 'off'],
     'zotero_auto_min_score': ['off', '5', '4', '3'],
     'zotero_existing': ['skip', 'fill'],
+    'zotero_target_mode': ['root', 'collection', 'rules', 'criteria'],
 }
 
 
@@ -107,9 +115,26 @@ def _valid_date(value: str) -> bool:
         return False
 
 
+def _valid_collection_key(value: str) -> bool:
+    return value == '' or bool(re.fullmatch(r'[A-Z0-9]{8}', value))
+
+
+def _valid_rules(value: str) -> bool:
+    try:
+        rules = json.loads(value)
+    except ValueError:
+        return False
+    return isinstance(rules, dict) and all(
+        isinstance(k, str) and isinstance(v, str) and _valid_collection_key(v) for k, v in rules.items())
+
+
 # 선택지가 아닌 값을 받는 설정의 검사 함수
 SETTING_VALIDATORS = {
     'start_date': _valid_date,
+    'zotero_target_collection': _valid_collection_key,
+    'zotero_fallback_collection': _valid_collection_key,
+    'zotero_rules': _valid_rules,
+    'zotero_criteria_file': lambda v: v.strip() != '',
 }
 
 
