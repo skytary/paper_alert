@@ -1,7 +1,7 @@
 """PaperAlert 버전 정보 (About 창에 표시). 새 버전을 내면 HISTORY 맨 앞에 추가한다."""
 
 APP_NAME = 'PaperAlert'
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 
 AUTHOR = {
     'name': 'Seongsoo Choi',
@@ -11,6 +11,16 @@ AUTHOR = {
 }
 
 HISTORY = [
+    {
+        'version': '2.1.0',
+        'date': '2026-10-04',
+        'changes': [
+            'Research interests, scoring rubric, and categories now live in a profile file '
+            '(research_profile.md) chosen in Settings, with a template and an example',
+            'Categories are read from the profile and enforced in Claude\'s answers',
+            'Quick Start guide and GitHub issue templates for new users',
+        ],
+    },
     {
         'version': '2.0.0',
         'date': '2026-10-04',

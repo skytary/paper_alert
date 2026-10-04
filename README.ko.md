@@ -4,7 +4,7 @@
 
 Gmail로 들어오는 학술지 신규 논문 알림(eTOC, OnlineFirst, Google Scholar 알림 등)을 모아서 한 화면에 정리하고, 마음에 드는 논문을 Zotero로 보내는 Windows용 데스크톱 앱입니다.
 
-사용법은 [사용 매뉴얼](MANUAL.ko.md)을 보세요.
+처음이라면 [빠른 시작](QUICKSTART.ko.md)을 따라 단계별로 설치하세요. 사용법은 [사용 매뉴얼](MANUAL.ko.md)에 있습니다.
 
 ## 하는 일
 
@@ -37,7 +37,7 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 
 1. Google Cloud Console에서 내려받은 OAuth 클라이언트 파일을 `credentials.json`이라는 이름으로 이 폴더에 둡니다.
 2. Gmail에 `논문_알리미` 라벨을 만들고, 논문 알림 메일에 이 라벨이 자동으로 붙도록 필터를 설정합니다. 라벨 이름을 바꾸려면 `gmail_client.py`의 `GMAIL_LABEL`을 고칩니다.
-3. **`paper_processor.py`의 `SYSTEM_PROMPT`를 자기 연구 관심사에 맞게 고칩니다.** 지금 들어 있는 프롬프트는 만든 사람(사회계층론·교육사회학·가족인구학 연구자)의 관심사와 강의 목록을 기준으로 점수를 매기도록 짜여 있습니다. 카테고리 이름을 바꾸면 `database.py`의 `DEFAULT_CATEGORIES`도 같이 바꿉니다.
+3. **연구 관심사 프로필을 씁니다**: `research_profile.template.md`를 `research_profile.md`로 복사하고 관심 주제, 선호 방법, 감점할 분야, 채점 기준, 카테고리를 채웁니다. Claude는 이 파일에 비춰 논문 점수를 매깁니다. 완성된 예시는 [examples/research_profile.example.md](examples/research_profile.example.md)에 있습니다.
 
 ## 실행
 
@@ -56,7 +56,10 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 |---|---|
 | `app.py` | Flask 웹앱, 이메일 처리 백그라운드 작업 |
 | `gmail_client.py` | Gmail API 인증과 메일 읽기 |
-| `paper_processor.py` | Claude API로 논문 추출·점수 매기기 (관심사 프롬프트 포함) |
+| `paper_processor.py` | Claude API로 논문 추출·점수 매기기 |
+| `research_profile.py` | 연구 관심사 프로필(관심사, 채점 기준, 카테고리) 읽기 |
+| `research_profile.template.md` | 연구 관심사 프로필 템플릿 |
+| `examples/research_profile.example.md` | 완성된 프로필 예시 |
 | `enrich.py` | Crossref·OpenAlex로 DOI·초록 보강 |
 | `batch_processor.py` | 배치 처리 (Message Batches API, 반값) |
 | `database.py` | SQLite 저장·조회, 설정 |
@@ -73,7 +76,7 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 
 - `.env`, `credentials.json`, `token.json`, `papers.db`에는 개인 키와 자료가 들어가므로 `.gitignore`로 막아 두었습니다. 직접 커밋하지 마세요.
 - 서버는 `127.0.0.1:5000`으로 떠서 이 컴퓨터에서만 접속할 수 있습니다. 같은 네트워크의 다른 기기에서 열려면 `app.py`와 `launch.pyw`의 `host`를 `'0.0.0.0'`으로 바꾸세요(인증이 없으니 공용 와이파이에서는 권하지 않습니다).
-- Claude 모델(`MODEL`, 기본 `claude-sonnet-5-5`)과 생각 깊이(`EFFORT`, 기본 `medium`)는 `paper_processor.py`에서 바꿀 수 있습니다. 응답 형식은 JSON 스키마(`EXTRACT_SCHEMA`, `SCORE_SCHEMA`)로 고정되고, 관심사 프롬프트는 캐싱됩니다.
+- Claude 모델(`MODEL`, 기본 `claude-sonnet-5-5`)과 생각 깊이(`EFFORT`, 기본 `medium`)는 `paper_processor.py`에서 바꿀 수 있습니다. 응답 형식은 JSON 스키마(`EXTRACT_SCHEMA`, `SCORE_SCHEMA`)로 고정되고, 평가 프롬프트(연구 관심사 프로필 포함)는 캐싱됩니다.
 
 Claude Code로 만들었습니다(첫 버전 2026년 3~4월, 2.0 업데이트 2026년 10월).
 

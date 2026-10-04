@@ -1,0 +1,68 @@
+name: Setup help (설치 도움)
+description: Stuck while installing or setting up PaperAlert? (설치나 설정 중에 막혔나요?)
+title: "[Setup] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying PaperAlert! Please check [When something goes wrong](https://github.com/skytary/paper_alert/blob/main/QUICKSTART.md#when-something-goes-wrong) in the Quick Start first.
+        You can write in English or Korean. (영어나 한국어 모두 괜찮습니다. 먼저 [빠른 시작의 문제 해결](https://github.com/skytary/paper_alert/blob/main/QUICKSTART.ko.md#문제가-생겼을-때)을 확인해 주세요.)
+
+        ⚠️ **Never paste the contents of `.env`, `credentials.json`, or `token.json`, or your API keys.** (API 키와 이 파일들의 내용은 절대 올리지 마세요.)
+  - type: dropdown
+    id: step
+    attributes:
+      label: Which step of the Quick Start? (빠른 시작의 몇 단계에서 막혔나요?)
+      options:
+        - "1. Install Python (파이썬 설치)"
+        - "2. Download PaperAlert (내려받기)"
+        - "3. Install packages (패키지 설치)"
+        - "4. Google Cloud / Gmail access (Gmail 권한)"
+        - "5. Gmail label and filter (라벨과 필터)"
+        - "6. Anthropic API key (API 키)"
+        - "7. Zotero API key"
+        - "8. .env file"
+        - "9. Research profile (연구 관심사 프로필)"
+        - "10. Starting the app / first Fetch (실행, 첫 Fetch)"
+        - "Other (기타)"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? (무슨 일이 있었나요?)
+      description: What did you do, and what did you see? Copy the exact error message. (무엇을 했고 무엇이 보였는지, 오류 메시지를 그대로 붙여 주세요.)
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (화면 캡처)
+      description: Optional. Drag an image here. Hide any keys or email addresses. (선택. 키나 이메일 주소는 가려 주세요.)
+  - type: textarea
+    id: log
+    attributes:
+      label: launch_error.log
+      description: If the file `launch_error.log` exists in the PaperAlert folder, paste its contents. (PaperAlert 폴더에 이 파일이 있으면 내용을 붙여 주세요.)
+      render: text
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows version
+      options:
+        - Windows 11
+        - Windows 10
+        - Other / not sure (기타, 모름)
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "Output of `python --version` (예: Python 3.12.4)"
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Privacy check (개인정보 확인)
+      options:
+        - label: I did not include API keys or the contents of .env, credentials.json, or token.json. (API 키나 이 파일들의 내용을 넣지 않았습니다.)
+          required: true

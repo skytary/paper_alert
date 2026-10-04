@@ -4,7 +4,7 @@
 
 A Windows desktop app that collects new-article alerts from academic journals in your Gmail (tables of contents, OnlineFirst alerts, Google Scholar alerts, and so on), organizes them on one screen, and sends the papers you want to Zotero.
 
-For day-to-day use, see the [User Manual](MANUAL.md).
+New here? Follow the [Quick Start](QUICKSTART.md) for step-by-step setup. For day-to-day use, see the [User Manual](MANUAL.md).
 
 ## What it does
 
@@ -37,7 +37,7 @@ Then:
 
 1. Put the OAuth client file downloaded from the Google Cloud Console in this folder as `credentials.json`.
 2. Create the Gmail label `논문_알리미` and a filter that applies it to your journal alert emails. To use a different label name, change `GMAIL_LABEL` in `gmail_client.py`.
-3. **Edit `SYSTEM_PROMPT` in `paper_processor.py` to describe your own research interests.** The included prompt scores papers against the author's interests (social stratification, sociology of education, family demography) and course list. If you rename the categories, also update `DEFAULT_CATEGORIES` in `database.py`.
+3. **Write your research profile**: copy `research_profile.template.md` to `research_profile.md` and fill in your interests, preferred methods, negative filters, scoring rubric, and categories. Claude scores every paper against this file. A complete example is in [examples/research_profile.example.md](examples/research_profile.example.md).
 
 ## Running
 
@@ -56,7 +56,10 @@ Use **⚙ Settings** to choose the summary language, start date, number and orde
 |---|---|
 | `app.py` | Flask web app and background email processing |
 | `gmail_client.py` | Gmail API authorization and email reading |
-| `paper_processor.py` | Article extraction and scoring with the Claude API (includes the research-interest prompt) |
+| `paper_processor.py` | Article extraction and scoring with the Claude API |
+| `research_profile.py` | Reads your research profile (interests, rubric, categories) |
+| `research_profile.template.md` | Template for your research profile |
+| `examples/research_profile.example.md` | A complete example profile |
 | `enrich.py` | DOI and abstract lookup via Crossref and OpenAlex |
 | `batch_processor.py` | Batch processing (Message Batches API, half price) |
 | `database.py` | SQLite storage, queries, and settings |
@@ -73,7 +76,7 @@ Use **⚙ Settings** to choose the summary language, start date, number and orde
 
 - `.env`, `credentials.json`, `token.json`, and `papers.db` contain private keys and data and are excluded by `.gitignore`. Do not commit them.
 - The server listens on `127.0.0.1:5000`, so only this computer can reach it. To allow other devices on your network, change `host` to `'0.0.0.0'` in `app.py` and `launch.pyw` (there is no authentication, so this is not recommended on public Wi-Fi).
-- The Claude model (`MODEL`, default `claude-sonnet-5-5`) and reasoning effort (`EFFORT`, default `medium`) are set in `paper_processor.py`. Responses are constrained by JSON schemas (`EXTRACT_SCHEMA`, `SCORE_SCHEMA`), and the research-interest prompt is cached.
+- The Claude model (`MODEL`, default `claude-sonnet-5-5`) and reasoning effort (`EFFORT`, default `medium`) are set in `paper_processor.py`. Responses are constrained by JSON schemas (`EXTRACT_SCHEMA`, `SCORE_SCHEMA`), and the scoring prompt (including your research profile) is cached.
 
 Built with Claude Code (first version March–April 2026; version 2.0 in October 2026).
 

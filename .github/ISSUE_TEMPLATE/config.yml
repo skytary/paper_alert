@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Quick Start guide (빠른 시작 안내)
+    url: https://github.com/skytary/paper_alert/blob/main/QUICKSTART.md
+    about: Step-by-step setup and solutions to common problems. (단계별 설치 안내와 자주 생기는 문제의 해결법)
+  - name: User Manual (사용 매뉴얼)
+    url: https://github.com/skytary/paper_alert/blob/main/MANUAL.md
+    about: How to use every feature and setting. (모든 기능과 설정 사용법)

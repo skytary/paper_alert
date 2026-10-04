@@ -1,0 +1,74 @@
+name: Bug report (버그 신고)
+description: PaperAlert is installed but something does not work as it should. (설치는 됐는데 무언가 제대로 작동하지 않나요?)
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You can write in English or Korean. (영어나 한국어 모두 괜찮습니다.)
+
+        ⚠️ **Never paste API keys or the contents of `.env`, `credentials.json`, or `token.json`.** (API 키와 이 파일들의 내용은 절대 올리지 마세요.)
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? (무슨 일이 있었나요?)
+      description: Copy any error message exactly as shown, including messages in the error list after Fetch. (오류 메시지는 화면에 나온 그대로 붙여 주세요.)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce (다시 일으키는 방법)
+      description: What did you click, in what order? (무엇을 어떤 순서로 눌렀나요?)
+      placeholder: |
+        1. Open Settings, set Fetch mode to Batch
+        2. Click Fetch
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect? (원래 기대한 결과)
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part? (어느 기능인가요?)
+      multiple: true
+      options:
+        - Fetch / email processing (메일 처리)
+        - Scores and summaries (점수, 요약)
+        - Paper list, filters (목록, 필터)
+        - Settings (설정)
+        - Batch mode (배치 처리)
+        - Send to Zotero (Zotero 보내기)
+        - Zotero collections / criteria file (컬렉션, 기준 파일)
+        - Research profile (연구 관심사 프로필)
+        - Shortcut, window, tray icon (바로가기, 창, 트레이)
+        - Other (기타)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PaperAlert version
+      description: "Shown in ⓘ About (예: 2.0.0)"
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (화면 캡처)
+      description: Optional. Hide keys, email addresses, and anything private. (선택. 키, 이메일 주소 등은 가려 주세요.)
+  - type: textarea
+    id: log
+    attributes:
+      label: launch_error.log
+      description: If the file `launch_error.log` exists in the PaperAlert folder, paste its contents.
+      render: text
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Privacy check (개인정보 확인)
+      options:
+        - label: I did not include API keys or the contents of .env, credentials.json, or token.json. (API 키나 이 파일들의 내용을 넣지 않았습니다.)
+          required: true

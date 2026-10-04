@@ -1,0 +1,24 @@
+name: Feature request (기능 제안)
+description: An idea that would make PaperAlert more useful. (PaperAlert를 더 쓸모 있게 만들 아이디어)
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: You can write in English or Korean. (영어나 한국어 모두 괜찮습니다.)
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do? (무엇을 하고 싶나요?)
+      description: Describe the situation and what is hard or missing today. (어떤 상황에서 무엇이 불편하거나 없는지 적어 주세요.)
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea (아이디어)
+      description: How could PaperAlert help? Rough ideas are welcome. (어떻게 도와주면 좋을지, 대략적이어도 괜찮습니다.)
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else? (그 밖에)

@@ -2,7 +2,7 @@
 
 **English** | [한국어](MANUAL.ko.md)
 
-This manual covers version 2.0.0. For installation and first-time setup, see the [README](README.md). This document explains how to use the app once it is running.
+This manual covers version 2.1.0. For installation and first-time setup, see the [Quick Start](QUICKSTART.md). This document explains how to use the app once it is running.
 
 ## Contents
 
@@ -80,7 +80,7 @@ The first time you click Fetch, or when Gmail access has expired, a Google sign-
 
 ### Managing categories
 
-Use **⚙ Manage categories** to add or delete categories. Deleting a category also removes it from the papers that have it. The list of categories Claude assigns to new papers is written in the prompt in `paper_processor.py`, so if you change your categories substantially, update the prompt as well.
+Use **⚙ Manage categories** to add or delete categories. Deleting a category also removes it from the papers that have it. The categories Claude assigns to new papers come from the **Categories** section of your research profile (`research_profile.md`); categories listed there are added to the app automatically. To change them for future papers, edit the profile.
 
 ---
 
@@ -115,6 +115,7 @@ Click **⚙ Settings** in the top bar. Changes are saved immediately ("Saved." a
 
 | Setting | Options | Description |
 |---|---|---|
+| Research profile | A file path | Your research interests, scoring rubric, and categories (default `research_profile.md` in the app folder). Settings shows the categories found in the file, or what is wrong with it. See [Changing your research interests](#changing-your-research-interests). |
 | Summary language | Korean / English | Language of the summary, data, and key findings. Applies to papers fetched afterwards. Default: Korean |
 | Start date | A date | Only emails received on or after this date are processed. Older emails stay unread in Gmail; click **Clear** to include them again. Useful for setting aside a backlog and starting fresh. |
 | Emails per fetch | 10, 25, 50, 100, 200, 500, All | How many emails one click of Fetch processes. Default: 50 |
@@ -250,6 +251,7 @@ Everything is in the app folder. These files are listed in `.gitignore` and are 
 | `papers.db` | Papers, processing records, settings, the Zotero index, batch progress |
 | `.env` | Anthropic and Zotero API keys |
 | `credentials.json`, `token.json` | Gmail authorization |
+| `research_profile.md` | Your research profile |
 | `zotero_분류기준.md` | Criteria file (default name) |
 | `_backup/` | Database backups |
 
@@ -257,4 +259,4 @@ To back up `papers.db`, quit the app and copy the file. If the app folder is in 
 
 ### Changing your research interests
 
-The research interests used for scoring are in `SYSTEM_PROMPT` in `paper_processor.py`. Replace the topics, preferred methods, regions, courses, and the scoring rubric (5 to 1) with your own. Restart the app; the new prompt applies to papers fetched afterwards.
+Scores come from your research profile, `research_profile.md` (or the file set in **Settings → Research profile**). Start from `research_profile.template.md`; a complete example is in `examples/research_profile.example.md`. Describe your core topics, preferred methods, regions, journals, courses, negative filters, and scoring rubric in plain language. Only the **Categories** section has a fixed format: one line per category, the name in backticks, then a colon and a short description. Changes apply to papers fetched after you save the file; no restart is needed.

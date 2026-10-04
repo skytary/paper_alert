@@ -2,7 +2,7 @@
 
 [English](MANUAL.md) | **한국어**
 
-버전 2.0.0 기준입니다. 설치와 처음 설정은 [README](README.ko.md)를 보세요. 이 문서는 앱을 켠 뒤 쓰는 법을 다룹니다.
+버전 2.1.0 기준입니다. 설치와 처음 설정은 [빠른 시작](QUICKSTART.ko.md)을 보세요. 이 문서는 앱을 켠 뒤 쓰는 법을 다룹니다.
 
 화면은 영어이므로, 이 문서에서는 버튼과 설정 이름을 화면에 보이는 그대로 적습니다.
 
@@ -82,7 +82,7 @@ PaperAlert는 Gmail로 받는 학술지 알림 메일(eTOC, OnlineFirst, Google 
 
 ### 카테고리 관리
 
-**⚙ Manage categories**에서 카테고리를 추가하거나 지울 수 있습니다. 카테고리를 지우면 그 카테고리가 붙은 논문에서도 빠집니다. Claude가 새 논문에 붙이는 카테고리 목록은 `paper_processor.py`의 프롬프트에 적혀 있으므로, 카테고리를 크게 바꾸려면 프롬프트도 같이 고쳐야 합니다.
+**⚙ Manage categories**에서 카테고리를 추가하거나 지울 수 있습니다. 카테고리를 지우면 그 카테고리가 붙은 논문에서도 빠집니다. Claude가 새 논문에 붙이는 카테고리는 연구 관심사 프로필(`research_profile.md`)의 **Categories** 절에서 옵니다. 거기에 적은 카테고리는 앱에 자동으로 추가됩니다. 앞으로 가져올 논문의 카테고리를 바꾸려면 프로필을 고치세요.
 
 ---
 
@@ -117,6 +117,7 @@ Settings의 **Auto-send to Zotero**를 켜면, Fetch로 새로 저장된 논문 
 
 | 설정 | 선택지 | 설명 |
 |---|---|---|
+| Research profile | 파일 경로 | 연구 관심사, 채점 기준, 카테고리를 적은 파일(기본값은 앱 폴더의 `research_profile.md`). 설정 창에 파일에서 찾은 카테고리나 파일의 문제를 보여 줍니다. [관심사 바꾸기](#관심사-바꾸기) 참고 |
 | Summary language | Korean / English | 요약·데이터·주요 발견을 쓸 언어. 바꾼 뒤에 가져오는 논문부터 적용됩니다. 기본 Korean |
 | Start date | 날짜 | 이 날짜 이후에 받은 메일만 처리합니다. 그 전 메일은 Gmail에 안 읽음으로 그대로 남고, **Clear**를 누르면 다시 처리 대상이 됩니다. 쌓인 메일을 두고 새로 시작하고 싶을 때 씁니다. |
 | Emails per fetch | 10, 25, 50, 100, 200, 500, All | Fetch 한 번에 처리할 메일 수. 기본 50 |
@@ -252,6 +253,7 @@ Claude API 비용은 Anthropic Console에서 충전한 크레딧에서 나갑니
 | `papers.db` | 논문, 처리 기록, 설정, Zotero 목록, 배치 진행 상황 |
 | `.env` | Anthropic·Zotero API 키 |
 | `credentials.json`, `token.json` | Gmail 인증 |
+| `research_profile.md` | 연구 관심사 프로필 |
 | `zotero_분류기준.md` | 분류 기준 파일 (예시 이름) |
 | `_backup/` | DB 백업 |
 
@@ -259,4 +261,4 @@ Claude API 비용은 Anthropic Console에서 충전한 크레딧에서 나갑니
 
 ### 관심사 바꾸기
 
-점수 기준이 되는 연구 관심사는 `paper_processor.py`의 `SYSTEM_PROMPT`에 있습니다. 관심 주제, 선호 방법, 지역, 강의 목록, 채점 기준(5점~1점)을 자기 것으로 고치면 됩니다. 고친 뒤 앱을 다시 켜면 새로 가져오는 논문부터 적용됩니다.
+점수는 연구 관심사 프로필 `research_profile.md`(또는 **Settings → Research profile**에서 지정한 파일)를 기준으로 매겨집니다. `research_profile.template.md`에서 시작하고, 완성된 예시는 `examples/research_profile.example.md`를 보세요. 핵심 주제, 선호 방법, 지역, 학술지, 강의, 감점 분야, 채점 기준을 평소 말하듯 쓰면 됩니다(한국어도 됩니다). 형식이 정해진 곳은 **Categories** 절뿐입니다. 카테고리 하나에 한 줄씩, 이름을 백틱(`)으로 감싸고 콜론 뒤에 짧은 설명을 씁니다. 파일을 저장한 뒤 가져오는 논문부터 적용되고, 앱을 다시 켤 필요는 없습니다.
