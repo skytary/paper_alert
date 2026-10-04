@@ -149,7 +149,7 @@ threading.Thread(target=_start_server, daemon=True).start()
 # 스플래시: 순수 CSS 애니메이션만 사용 (JS fetch 없음 — CORS 문제 방지)
 # URL 전환은 Python 쪽에서 window.load_url()로 처리
 SPLASH_HTML = """<!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <style>
@@ -182,7 +182,7 @@ body {
   <div class="title">PaperAlert</div>
   <div class="status">
     <div class="spinner"></div>
-    <span>시작 중...</span>
+    <span>Starting...</span>
   </div>
 </body>
 </html>"""
@@ -221,9 +221,9 @@ tray = pystray.Icon(
     icon=_tray_img,
     title='PaperAlert',
     menu=pystray.Menu(
-        pystray.MenuItem('PaperAlert 열기', _show_window, default=True),
+        pystray.MenuItem('Open PaperAlert', _show_window, default=True),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem('종료', _quit),
+        pystray.MenuItem('Quit', _quit),
     ),
 )
 tray.run_detached()

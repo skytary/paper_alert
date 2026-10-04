@@ -28,7 +28,7 @@ _status = {
     'cancel_requested': False,
     'current': 0,
     'total': 0,
-    'message': '대기 중',
+    'message': 'Idle',
     'errors': [],
     'last_run': None,
 }
@@ -91,20 +91,35 @@ def get_papers():
 def start_processing():
     with _status_lock:
         if _status['is_processing']:
-            return jsonify({'error': '이미 처리 중입니다.'}), 400
+            return jsonify({'error': 'A fetch is already running.'}), 400
 
     t = threading.Thread(target=_process_emails_background, daemon=True)
     t.start()
-    return jsonify({'message': '이메일 처리를 시작합니다.'})
+    return jsonify({'message': 'Fetch started.'})
 
 
 @app.route('/api/cancel', methods=['POST'])
 def cancel_processing():
     with _status_lock:
         if not _status['is_processing']:
-            return jsonify({'error': '처리 중이 아닙니다.'}), 400
+            return jsonify({'error': 'No fetch is running.'}), 400
         _status['cancel_requested'] = True
-    return jsonify({'message': '취소 요청이 접수되었습니다.'})
+    return jsonify({'message': 'Stop requested.'})
+
+
+# ── 설정 ─────────────────────────────────────────────────────────────────── #
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    return jsonify({'settings': database.get_settings(), 'choices': database.SETTING_CHOICES})
+
+
+@app.route('/api/settings', methods=['PUT'])
+def put_settings():
+    try:
+        return jsonify({'settings': database.update_settings(request.json or {})})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
 
 # ── 카테고리 관리 ─────────────────────────────────────────────────────────── #
@@ -119,10 +134,10 @@ def add_category():
     data = request.json or {}
     name = data.get('name', '').strip()
     if not name:
-        return jsonify({'error': '카테고리 이름이 필요합니다.'}), 400
+        return jsonify({'error': 'Category name is required.'}), 400
     if database.add_category(name):
         return jsonify({'success': True})
-    return jsonify({'error': '이미 존재하는 카테고리입니다.'}), 400
+    return jsonify({'error': 'This category already exists.'}), 400
 
 
 @app.route('/api/categories/<path:name>', methods=['DELETE'])
@@ -138,7 +153,7 @@ def update_score(paper_id):
     data = request.json or {}
     score = data.get('score')
     if score is None:
-        return jsonify({'error': '점수가 필요합니다.'}), 400
+        return jsonify({'error': 'Score is required.'}), 400
     try:
         database.update_paper_score(paper_id, score)
         return jsonify({'success': True})
@@ -151,7 +166,7 @@ def update_checked(paper_id):
     data = request.json or {}
     checked = data.get('checked')
     if checked is None:
-        return jsonify({'error': '확인 여부가 필요합니다.'}), 400
+        return jsonify({'error': 'Read status is required.'}), 400
     try:
         database.update_paper_checked(paper_id, checked)
         return jsonify({'success': True})
@@ -177,18 +192,18 @@ def _process_emails_background():
         current=0,
         total=0,
         errors=[],
-        message='Gmail에서 미읽은 이메일 목록을 가져오는 중...',
+        message='Getting unread alert emails from Gmail...',
     )
 
     try:
         # 1단계: ID 목록만 가져옴 (읽음 처리 안함)
         email_ids = gmail_client.list_unread_email_ids()
         total = len(email_ids)
-        update_status(total=total, message=f'{total}개의 미읽은 이메일을 찾았습니다.')
+        update_status(total=total, message=f'Found {total} unread alert emails.')
 
         if total == 0:
             update_status(
-                message='처리할 새 이메일이 없습니다.',
+                message='No new emails to fetch.',
                 is_processing=False,
                 last_run=_now(),
             )
@@ -205,9 +220,9 @@ def _process_emails_background():
             if is_cancel_requested():
                 remaining = total - i
                 update_status(
-                    message=f'취소됨. {processed_count}개 이메일 처리, '
-                            f'{saved_total}편 논문 저장. '
-                            f'(미처리 {remaining}개는 다음 실행 시 처리됩니다)',
+                    message=f'Stopped. {processed_count} emails processed, '
+                            f'{saved_total} papers saved. '
+                            f'({remaining} remaining emails will be fetched next time.)',
                     is_processing=False,
                     cancel_requested=False,
                     last_run=_now(),
@@ -224,12 +239,12 @@ def _process_emails_background():
                 # 이메일 내용 가져오기
                 update_status(
                     current=i + 1,
-                    message=f'이메일 내용 로드 중 ({i+1}/{total})...',
+                    message=f'Loading email ({i+1}/{total})...',
                 )
                 email = gmail_client.get_email_content_by_id(email_id)
 
-                subj = email.get('subject', '(제목 없음)')[:60]
-                update_status(message=f'분석 중 ({i+1}/{total}): {subj}')
+                subj = email.get('subject', '(no subject)')[:60]
+                update_status(message=f'Analyzing ({i+1}/{total}): {subj}')
 
                 # 논문 목록 추출 → DOI·초록 보강 → 이미 있는 논문 건너뛰기 → 평가
                 papers, skipped = paper_processor.process_email(email)
@@ -249,13 +264,13 @@ def _process_emails_background():
                 processed_count += 1
 
             except Exception as e:
-                err_msg = f"이메일 처리 오류 ({i+1}/{total}): {e}"
+                err_msg = f"Error in email {i+1}/{total}: {e}"
                 errors.append(err_msg)
                 print(err_msg)
 
         update_status(
-            message=f'완료! {processed_count}개 이메일 처리, 논문 {saved_total}편 저장 '
-                    f'(이미 있던 논문 {skipped_total}편은 건너뜀).',
+            message=f'Done. {processed_count} emails processed, {saved_total} papers saved '
+                    f'({skipped_total} already in the library were skipped).',
             is_processing=False,
             errors=errors,
             last_run=_now(),
@@ -263,7 +278,7 @@ def _process_emails_background():
 
     except Exception as e:
         update_status(
-            message=f'오류 발생: {e}',
+            message=f'Error: {e}',
             is_processing=False,
             cancel_requested=False,
             errors=[str(e)],

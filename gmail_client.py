@@ -154,8 +154,8 @@ def list_unread_email_ids() -> list[str]:
 
     if not label_id:
         raise ValueError(
-            f"Gmail 라벨 '{GMAIL_LABEL}'을 찾을 수 없습니다. "
-            "Gmail에서 해당 라벨을 먼저 생성해주세요."
+            f"Gmail label '{GMAIL_LABEL}' was not found. "
+            "Create the label in Gmail first."
         )
 
     results = service.users().messages().list(

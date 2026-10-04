@@ -148,14 +148,15 @@ SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantit
     * No usable methods or conceptual contribution
 
     [OUTPUT REQUIREMENTS]
-    For each paper, fill in these fields (the response format is enforced by a JSON schema):
+    For each paper, fill in these fields (the response format is enforced by a JSON schema).
+    Write 'summary_kr', 'field_data', and 'key_findings' in the OUTPUT LANGUAGE named in the request (the field names stay the same whatever the language).
 
     1. 'index': the paper's number in the list.
     2. 'score': integer 1-5 per the rubric above.
-    3. 'summary_kr': Objective & Finding (1 sentence, KOREAN).
+    3. 'summary_kr': Objective & Finding (1 sentence, in the output language).
     4. 'method': Specific method as named in the abstract (English preferred, e.g., "RDD", "RIF Regression", "Two-way fixed effects with event study").
-    5. 'field_data': Data/Context (KOREAN). **Name the specific dataset(s) when the abstract names them** (e.g., "NLSY97", "PSID", "한국교육종단연구(KELS)", "덴마크 행정 등록자료"), together with the country/population and period. Avoid vague labels such as "미국, 종단 데이터" when the abstract gives more detail.
-    6. 'key_findings': **Write 2-3 detailed sentences in KOREAN.** Do NOT give a vague summary. Be specific about the direction of effects, specific groups affected, or key statistical results. (e.g., instead of "Education affects income", write "College education increases income by 10%, but this effect is stratified by parental background.")
+    5. 'field_data': Data/Context (in the output language). **Name the specific dataset(s) when the abstract names them** (e.g., "NLSY97", "PSID", "한국교육종단연구(KELS)", "덴마크 행정 등록자료"), together with the country/population and period. Avoid vague labels such as "U.S., longitudinal data" when the abstract gives more detail.
+    6. 'key_findings': **Write 2-3 detailed sentences in the output language.** Do NOT give a vague summary. Be specific about the direction of effects, specific groups affected, or key statistical results. (e.g., instead of "Education affects income", write "College education increases income by 10%, but this effect is stratified by parental background.")
     7. 'relevance_category': Select ALL that apply (can be multiple):
       - "Core: Research"
       - "Method: Causal/Advanced"
@@ -165,7 +166,7 @@ SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantit
       - "General Interest"
 
     [WHEN THE ABSTRACT IS MISSING]
-    If a paper has no abstract (neither in the list nor in the email), score it from the title, authors, and journal, but do not invent details. Write "초록 없음" for 'method', 'field_data', and 'key_findings', and base 'summary_kr' only on what the title states."""
+    If a paper has no abstract (neither in the list nor in the email), score it from the title, authors, and journal, but do not invent details. Write the NO-ABSTRACT MARKER given in the request for 'method', 'field_data', and 'key_findings', and base 'summary_kr' only on what the title states."""
 
 EXTRACT_PROMPT = """You extract the list of articles from an academic journal alert email (eTOC, OnlineFirst, Google Scholar alerts, etc.).
 
@@ -177,6 +178,9 @@ Rules:
 * 'year': the publication year only if the email states it. Use null otherwise; do not guess.
 * If the email contains no articles, return an empty 'papers' list."""
 
+
+# 요약 언어별 '초록 없음' 표시. 언어 지시는 캐싱되는 시스템 프롬프트가 아니라 요청 쪽에 넣는다.
+NO_ABSTRACT_MARKER = {'Korean': '초록 없음', 'English': 'No abstract'}
 
 _NULLABLE_STR = {"type": ["string", "null"]}
 
@@ -261,9 +265,9 @@ def _call(system: str, user: str, schema: dict, effort: str, label: str) -> dict
         response = stream.get_final_message()
 
     if response.stop_reason == 'max_tokens':
-        raise RuntimeError(f'응답이 길이 상한({MAX_TOKENS}토큰)에서 잘림: {label}')
+        raise RuntimeError(f'Response cut off at the {MAX_TOKENS}-token limit: {label}')
     if response.stop_reason == 'refusal':
-        raise RuntimeError(f'Claude가 처리를 거절함: {label}')
+        raise RuntimeError(f'Claude declined to process: {label}')
     text = next((b.text for b in response.content if b.type == 'text'), '')
     return json.loads(text)
 
@@ -278,7 +282,7 @@ def extract_papers(email_content: dict) -> list[dict]:
     return [p for p in papers if p['title']]
 
 
-def score_papers(papers: list[dict], email_content: dict) -> list[dict]:
+def score_papers(papers: list[dict], email_content: dict, language: str = 'Korean') -> list[dict]:
     """2단계: 논문마다 점수·요약을 매김. 초록은 보강 단계에서 찾은 것을 붙여 보냄."""
     lines = []
     for i, p in enumerate(papers, 1):
@@ -288,7 +292,9 @@ def score_papers(papers: list[dict], email_content: dict) -> list[dict]:
         abstract = p.get('abstract') or '(not found in databases; use the email body if it has one)'
         lines.append(f"    Abstract: {abstract}")
     subject = email_content.get('subject', '')
-    user = ("Papers to score:\n\n" + "\n".join(lines)
+    marker = NO_ABSTRACT_MARKER.get(language, NO_ABSTRACT_MARKER['English'])
+    user = (f"OUTPUT LANGUAGE: {language}\nNO-ABSTRACT MARKER: {marker}\n\n"
+            + "Papers to score:\n\n" + "\n".join(lines)
             + f"\n\n--- Original alert email (context) ---\nSubject: {subject}\n\n"
             + email_content.get('body', ''))
     results = _call(SYSTEM_PROMPT, user, SCORE_SCHEMA, EFFORT, subject[:60])['results']
@@ -296,7 +302,7 @@ def score_papers(papers: list[dict], email_content: dict) -> list[dict]:
     by_index = {r['index']: r for r in results}
     missing = [i for i in range(1, len(papers) + 1) if i not in by_index]
     if missing:
-        raise RuntimeError(f'평가 결과가 빠진 논문 {len(missing)}편: {subject[:60]}')
+        raise RuntimeError(f'Scores missing for {len(missing)} papers: {subject[:60]}')
 
     scored = []
     for i, p in enumerate(papers, 1):
@@ -314,7 +320,8 @@ def score_papers(papers: list[dict], email_content: dict) -> list[dict]:
     return scored
 
 
-def process_email(email_content: dict, skip_existing: bool = True) -> tuple[list[dict], int]:
+def process_email(email_content: dict, skip_existing: bool = True,
+                  language: str | None = None) -> tuple[list[dict], int]:
     """메일 한 통 처리: 목록 뽑기 → DOI·초록 보강 → 이미 있는 논문 건너뛰기 → 평가.
 
     반환값은 (저장할 논문 목록, 이미 DB에 있어 건너뛴 편수).
@@ -338,7 +345,8 @@ def process_email(email_content: dict, skip_existing: bool = True) -> tuple[list
     if not papers:
         return [], skipped
 
-    scored = score_papers(papers, email_content)
+    language = language or database.get_settings()['summary_language']
+    scored = score_papers(papers, email_content, language)
     now = datetime.now().isoformat()
     for p in scored:
         p['email_id'] = email_content['id']

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PaperAlert 📚</title>
+  <title>PaperAlert</title>
   <style>
     :root {
       --c-bg: #f0f2f5;
@@ -83,6 +83,16 @@
       font-size: .8rem;
     }
     .btn-ghost:hover { background: var(--c-bg); color: var(--c-text); }
+    .btn-settings { background: rgba(255,255,255,.12); color: inherit; }
+    .btn-settings:hover { background: rgba(255,255,255,.22); }
+    .settings-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--c-border, #e5e7eb);
+    }
+    .settings-row:last-child { border-bottom: none; }
+    .settings-row .settings-label { font-weight: 600; font-size: .9rem; }
+    .settings-row .settings-help { color: var(--c-muted); font-size: .78rem; margin-top: 2px; }
+    .settings-saved { color: #16a34a; font-size: .8rem; min-height: 1.2em; margin-top: 8px; }
 
     /* ── Status Banner ── */
     #status-banner {
@@ -691,9 +701,10 @@
   <h1><span>📚</span> PaperAlert</h1>
   <div class="header-right">
     <span id="last-run" style="font-size:.78rem;opacity:.65;"></span>
+    <button class="btn btn-settings" onclick="openSettings()" title="Settings">⚙ Settings</button>
     <button class="btn btn-primary" id="process-btn" onclick="startProcessing()">
       <span id="process-btn-icon">📥</span>
-      새 이메일 처리
+      Fetch
     </button>
   </div>
 </header>
@@ -702,17 +713,17 @@
 <div id="status-banner" class="hidden">
   <div class="spinner" id="status-spinner"></div>
   <div id="status-progress">
-    <div id="status-message">처리 중...</div>
+    <div id="status-message">Working...</div>
     <div class="progress-bar">
       <div class="progress-fill" id="progress-fill" style="width:0%"></div>
     </div>
   </div>
-  <button class="btn-cancel" id="cancel-btn" onclick="onBannerButton()">⏹ 중지</button>
+  <button class="btn-cancel" id="cancel-btn" onclick="onBannerButton()">⏹ Stop</button>
 </div>
 
 <!-- Error List -->
 <div class="error-list" id="error-list">
-  <strong>처리 중 오류 발생:</strong>
+  <strong>Errors during fetch:</strong>
   <ul id="error-items"></ul>
 </div>
 
@@ -720,22 +731,22 @@
 <div class="stats-row">
   <div class="stat-card">
     <div class="value" id="stat-total">–</div>
-    <div class="label">전체 논문</div>
+    <div class="label">All papers</div>
   </div>
   <div class="stat-card">
     <div class="value" id="stat-high">–</div>
-    <div class="label">고관심 (4-5점)</div>
+    <div class="label">High interest (4–5)</div>
   </div>
   <div class="stat-card" style="cursor:pointer"
        onclick="setCheckedFilter(document.querySelector('.check-chip[data-checked=\'0\']'), 0)"
-       title="클릭하면 미확인 논문만 필터링">
+       title="Click to show unread papers only">
     <div class="value" id="stat-unchecked" style="color:var(--c-s3)">–</div>
-    <div class="label">미확인 논문</div>
+    <div class="label">Unread papers</div>
   </div>
   <div class="cat-stats-panel">
     <div class="cat-stats-header">
-      <span class="cat-stats-title">논문 분류 현황</span>
-      <button class="btn-ghost" onclick="openCatManager()">⚙ 분류 관리</button>
+      <span class="cat-stats-title">Papers by category</span>
+      <button class="btn-ghost" onclick="openCatManager()">⚙ Manage categories</button>
     </div>
     <div class="cat-stats-grid" id="cat-stats-grid">
       <!-- 동적 생성 -->
@@ -745,79 +756,99 @@
 
 <!-- Filter Bar -->
 <div class="filter-bar">
-  <label>점수 필터</label>
+  <label>Score</label>
   <div class="score-filter">
-    <span class="score-chip active" data-min="1" onclick="setScoreFilter(this)">전체</span>
-    <span class="score-chip" data-min="3" onclick="setScoreFilter(this)">3점+</span>
-    <span class="score-chip" data-min="4" onclick="setScoreFilter(this)">4점+</span>
-    <span class="score-chip" data-min="5" onclick="setScoreFilter(this)">5점만</span>
+    <span class="score-chip active" data-min="1" onclick="setScoreFilter(this)">All</span>
+    <span class="score-chip" data-min="3" onclick="setScoreFilter(this)">3+</span>
+    <span class="score-chip" data-min="4" onclick="setScoreFilter(this)">4+</span>
+    <span class="score-chip" data-min="5" onclick="setScoreFilter(this)">5 only</span>
   </div>
   <div class="filter-divider"></div>
-  <label>확인 여부</label>
+  <label>Status</label>
   <div class="check-filter">
-    <span class="check-chip active" data-checked="all" onclick="setCheckedFilter(this, null)">전체</span>
-    <span class="check-chip" data-checked="0" onclick="setCheckedFilter(this, 0)">미확인</span>
-    <span class="check-chip" data-checked="1" onclick="setCheckedFilter(this, 1)">확인</span>
+    <span class="check-chip active" data-checked="all" onclick="setCheckedFilter(this, null)">All</span>
+    <span class="check-chip" data-checked="0" onclick="setCheckedFilter(this, 0)">Unread</span>
+    <span class="check-chip" data-checked="1" onclick="setCheckedFilter(this, 1)">Read</span>
   </div>
   <div class="filter-divider"></div>
-  <label>학술지</label>
+  <label>Journal</label>
   <select id="journal-filter" onchange="loadPapers()">
-    <option value="">전체</option>
+    <option value="">All journals</option>
   </select>
-  <label>연도</label>
+  <label>Year</label>
   <select id="year-filter" onchange="loadPapers()">
-    <option value="">전체</option>
+    <option value="">All years</option>
   </select>
-  <label>분류</label>
+  <label>Category</label>
   <select id="cat-filter" onchange="setCatFilterFromDropdown()">
-    <option value="">전체</option>
+    <option value="">All categories</option>
   </select>
   <div class="filter-divider"></div>
-  <label>정렬</label>
+  <label>Sort</label>
   <select id="sort-select" onchange="loadPapers()">
-    <option value="interest_score|DESC">점수 높은순</option>
-    <option value="interest_score|ASC">점수 낮은순</option>
-    <option value="processed_at|DESC">처리일 최신순</option>
-    <option value="processed_at|ASC">처리일 오래된순</option>
-    <option value="year|DESC">출판연도 최신순</option>
-    <option value="journal|ASC">학술지명순</option>
+    <option value="interest_score|DESC">Score: high to low</option>
+    <option value="interest_score|ASC">Score: low to high</option>
+    <option value="processed_at|DESC">Fetched: newest first</option>
+    <option value="processed_at|ASC">Fetched: oldest first</option>
+    <option value="year|DESC">Year: newest first</option>
+    <option value="journal|ASC">Journal: A to Z</option>
   </select>
   <div class="filter-divider"></div>
-  <input type="text" id="search-input" placeholder="제목, 저자 검색..."
+  <input type="text" id="search-input" placeholder="Search title or author..."
          oninput="debounceSearch()">
 </div>
 
 <!-- Main -->
 <main>
   <div class="papers-header">
-    <h2><span id="paper-count">0</span>편의 논문</h2>
+    <h2><span id="paper-count">0</span> papers</h2>
     <div id="cat-filter-tag" class="cat-filter-tag hidden">
       <span class="cat-filter-tag-text" id="cat-filter-tag-text"></span>
-      <button class="cat-filter-tag-clear" onclick="clearCatFilter()" title="분류 필터 해제">✕</button>
+      <button class="cat-filter-tag-clear" onclick="clearCatFilter()" title="Clear category filter">✕</button>
     </div>
   </div>
   <div id="papers-grid">
     <div class="empty-state">
       <div class="icon">📭</div>
-      <h3>아직 논문이 없습니다</h3>
-      <p>"새 이메일 처리" 버튼을 눌러 Gmail에서 논문을 가져오세요.</p>
+      <h3>No papers yet</h3>
+      <p>Click "Fetch" to collect papers from your Gmail alerts.</p>
     </div>
   </div>
 </main>
+
+<!-- Settings Modal -->
+<div class="modal-overlay hidden" id="settings-modal" onclick="if (event.target === this) closeSettings()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>⚙ Settings</h3>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Summary language</div>
+          <div class="settings-help">Language for the summary, data, and key findings of newly fetched papers. Papers already in the library keep their language.</div>
+        </div>
+        <select id="setting-summary_language" onchange="saveSetting('summary_language', this.value)"></select>
+      </div>
+      <div class="settings-saved" id="settings-saved"></div>
+    </div>
+  </div>
+</div>
 
 <!-- Category Manager Modal -->
 <div class="modal-overlay hidden" id="cat-manager-modal" onclick="closeCatManagerOnBg(event)">
   <div class="modal">
     <div class="modal-header">
-      <h3>📂 분류 관리</h3>
+      <h3>📂 Manage categories</h3>
       <button class="modal-close" onclick="closeCatManager()">✕</button>
     </div>
     <div class="modal-body">
       <div id="cat-manager-list"><!-- 동적 생성 --></div>
       <div class="add-cat-row">
-        <input id="new-cat-input" placeholder="새 분류 이름 입력..."
+        <input id="new-cat-input" placeholder="New category name..."
                onkeydown="if(event.key==='Enter') addCategory()">
-        <button class="btn-add-cat" onclick="addCategory()">추가</button>
+        <button class="btn-add-cat" onclick="addCategory()">Add</button>
       </div>
     </div>
   </div>
@@ -831,7 +862,7 @@ let activeChecked = null;   // null=전체, 0=미확인, 1=확인
 let allCategories = [];
 let pollingTimer = null;
 let searchTimer = null;
-const SCORE_LABELS = ['', '관련 낮음', '낮음', '보통', '높음', '매우 높음'];
+const SCORE_LABELS = ['', 'Skip', 'Low', 'Moderate', 'High', 'Must read'];
 
 // ─── Init ──────────────────────────────────────────────────────────────── //
 document.addEventListener('DOMContentLoaded', async () => {
@@ -873,9 +904,9 @@ async function loadStats() {
     const jSel = document.getElementById('journal-filter');
     const ySel = document.getElementById('year-filter');
     const curJ = jSel.value, curY = ySel.value;
-    jSel.innerHTML = '<option value="">전체 학술지</option>' +
+    jSel.innerHTML = '<option value="">All journals</option>' +
       (s.journals || []).map(j => `<option value="${esc(j)}"${j===curJ?' selected':''}>${esc(j)}</option>`).join('');
-    ySel.innerHTML = '<option value="">전체 연도</option>' +
+    ySel.innerHTML = '<option value="">All years</option>' +
       (s.years || []).map(y => `<option value="${y}"${String(y)===curY?' selected':''}>${y}</option>`).join('');
   } catch (e) {
     console.error('Stats load failed:', e);
@@ -886,7 +917,7 @@ async function loadStats() {
 function populateCatFilterDropdown() {
   const sel = document.getElementById('cat-filter');
   const cur = sel.value;
-  sel.innerHTML = '<option value="">전체 분류</option>' +
+  sel.innerHTML = '<option value="">All categories</option>' +
     allCategories.map(c => `<option value="${esc(c)}"${c===cur?' selected':''}>${esc(c)}</option>`).join('');
 }
 
@@ -963,8 +994,8 @@ function renderPapers(papers) {
   if (papers.length === 0) {
     grid.innerHTML = `<div class="empty-state">
       <div class="icon">🔍</div>
-      <h3>해당 조건의 논문이 없습니다</h3>
-      <p>필터를 조정하거나 새 이메일을 처리해보세요.</p>
+      <h3>No papers match these filters</h3>
+      <p>Adjust the filters or click "Fetch" to collect new papers.</p>
     </div>`;
     return;
   }
@@ -1002,13 +1033,13 @@ function paperCard(p) {
   const pillsHtml = `<div class="meta-pills" id="pills-${p.id}">
     ${p.method ? `<span class="pill method">${esc(p.method)}</span>` : ''}
     ${catPills}
-    <button class="pill-edit-btn" onclick="toggleCatEditor(event,${p.id})" title="분류 편집">✏ 편집</button>
+    <button class="pill-edit-btn" onclick="toggleCatEditor(event,${p.id})" title="Edit categories">✏ Edit</button>
   </div>
   <div class="cat-editor hidden" id="cedit-${p.id}">
     <div class="cat-editor-grid">${catCheckboxes}</div>
     <div class="cat-editor-footer">
-      <button class="btn-cancel-cats" onclick="toggleCatEditor(event,${p.id})">취소</button>
-      <button class="btn-save-cats" onclick="savePaperCategories(${p.id})">저장</button>
+      <button class="btn-cancel-cats" onclick="toggleCatEditor(event,${p.id})">Cancel</button>
+      <button class="btn-save-cats" onclick="savePaperCategories(${p.id})">Save</button>
     </div>
   </div>`;
 
@@ -1018,19 +1049,19 @@ function paperCard(p) {
       </div>` : '';
 
   const findingsHtml = p.key_findings
-    ? `<button class="toggle-link" onclick="toggleBlock('findings-${p.id}')">🔍 주요 발견</button>
+    ? `<button class="toggle-link" onclick="toggleBlock('findings-${p.id}')">🔍 Key findings</button>
        <div class="findings-block" id="findings-${p.id}">${esc(p.key_findings)}</div>` : '';
 
   const contextLines = [p.field_data, p.score_reason].filter(Boolean);
   const reasonHtml = contextLines.length
-    ? `<button class="toggle-link" onclick="toggleBlock('reason-${p.id}')">💬 데이터 & 평가</button>
+    ? `<button class="toggle-link" onclick="toggleBlock('reason-${p.id}')">💬 Data & method</button>
        <div class="reason-block" id="reason-${p.id}">${contextLines.map(esc).join('<br><br>')}</div>` : '';
 
   const linkBtn = linkUrl
     ? `<a href="${esc(linkUrl)}" target="_blank" rel="noopener"
-          class="btn btn-sm btn-outline">논문 열기</a>`
+          class="btn btn-sm btn-outline">Open paper</a>`
     : `<a href="${scholarUrl}" target="_blank" rel="noopener"
-          class="btn btn-sm btn-outline" style="opacity:.75" title="Google Scholar에서 검색">🔍 Scholar</a>`;
+          class="btn btn-sm btn-outline" style="opacity:.75" title="Search on Google Scholar">🔍 Scholar</a>`;
 
   const isChecked = p.is_checked === 1;
   const checkBtn = `<button class="check-btn${isChecked ? ' checked' : ''}"
@@ -1038,20 +1069,20 @@ function paperCard(p) {
       data-paper-id="${p.id}"
       data-checked="${isChecked ? 1 : 0}"
       onclick="toggleChecked(this)"
-      title="${isChecked ? '확인됨 — 클릭하여 미확인으로 변경' : '미확인 — 클릭하여 확인으로 변경'}"
-    >${isChecked ? '✓ 확인' : '○ 미확인'}</button>`;
+      title="${isChecked ? 'Read — click to mark as unread' : 'Unread — click to mark as read'}"
+    >${isChecked ? '✓ Read' : '○ Unread'}</button>`;
 
   return `<div class="paper-card" id="card-${p.id}">
     <div class="card-top">
       <div class="card-meta">
         <div style="flex:1;min-width:0;">
-          ${procDate ? `<div class="processed-date">${procDate} 처리</div>` : ''}
+          ${procDate ? `<div class="processed-date">Fetched ${procDate}</div>` : ''}
           <div class="journal-year">${esc(journalYear)}</div>
         </div>
         <div class="score-wrap">
           <div class="score-badge s${sc}" id="sbadge-${p.id}"
                onclick="toggleScorePicker(event,${p.id})"
-               title="${SCORE_LABELS[sc]} — 클릭하여 수정">${sc}</div>
+               title="${SCORE_LABELS[sc]} — click to change">${sc}</div>
           <div class="score-picker hidden" id="spicker-${p.id}">
             ${[1,2,3,4,5].map(n =>
               `<button class="sp-btn s${n}" onclick="saveScore(event,${p.id},${n})">${n}</button>`
@@ -1096,10 +1127,10 @@ async function saveScore(event, paperId, score) {
       const badge = document.getElementById(`sbadge-${paperId}`);
       badge.className = `score-badge s${score}`;
       badge.textContent = score;
-      badge.title = `${SCORE_LABELS[score]} — 클릭하여 수정`;
+      badge.title = `${SCORE_LABELS[score]} — click to change`;
       loadStats();
     }
-  } catch (e) { console.error('점수 저장 실패:', e); }
+  } catch (e) { console.error('Failed to save score:', e); }
 }
 
 // ─── Category editing per paper ───────────────────────────────────────── //
@@ -1131,14 +1162,48 @@ async function savePaperCategories(paperId) {
       const methodPill = pillsDiv.querySelector('.pill.method');
       const methodHtml = methodPill ? methodPill.outerHTML : '';
       pillsDiv.innerHTML = methodHtml + catPills +
-        `<button class="pill-edit-btn" onclick="toggleCatEditor(event,${paperId})" title="분류 편집">✏ 편집</button>`;
+        `<button class="pill-edit-btn" onclick="toggleCatEditor(event,${paperId})" title="Edit categories">✏ Edit</button>`;
       editor.classList.add('hidden');
       loadStats();
     }
-  } catch (e) { console.error('카테고리 저장 실패:', e); }
+  } catch (e) { console.error('Failed to save categories:', e); }
 }
 
 // ─── Category Manager Modal ────────────────────────────────────────────── //
+// ─── Settings ──────────────────────────────────────────────────────────── //
+async function openSettings() {
+  const data = await fetch('/api/settings').then(r => r.json());
+  for (const [key, choices] of Object.entries(data.choices)) {
+    const sel = document.getElementById('setting-' + key);
+    if (!sel) continue;
+    sel.innerHTML = choices.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    sel.value = data.settings[key];
+  }
+  document.getElementById('settings-saved').textContent = '';
+  document.getElementById('settings-modal').classList.remove('hidden');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.add('hidden');
+}
+
+async function saveSetting(key, value) {
+  const msg = document.getElementById('settings-saved');
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value }),
+    });
+    const data = await res.json();
+    msg.style.color = data.error ? '#dc2626' : '';
+    msg.textContent = data.error ? data.error : 'Saved.';
+  } catch (e) {
+    msg.style.color = '#dc2626';
+    msg.textContent = 'Could not save: ' + e;
+  }
+}
+
 function openCatManager() {
   renderCatManagerList();
   document.getElementById('cat-manager-modal').classList.remove('hidden');
@@ -1156,9 +1221,9 @@ function renderCatManagerList() {
         <div class="cat-manager-row">
           <span>${esc(cat)}</span>
           <button class="btn-del-cat" onclick="deleteCategory('${esc(cat)}')"
-                  title="삭제">✕</button>
+                  title="Delete">✕</button>
         </div>`).join('')
-    : '<p style="color:var(--c-muted);font-size:.85rem;">등록된 분류가 없습니다.</p>';
+    : '<p style="color:var(--c-muted);font-size:.85rem;">No categories yet.</p>';
 }
 
 async function addCategory() {
@@ -1178,12 +1243,12 @@ async function addCategory() {
     loadStats();
   } else {
     const d = await res.json();
-    alert(d.error || '추가 실패');
+    alert(d.error || 'Could not add the category.');
   }
 }
 
 async function deleteCategory(name) {
-  if (!confirm(`"${name}" 분류를 삭제하시겠습니까?\n(논문의 기존 태그에서도 제거됩니다)`)) return;
+  if (!confirm(`Delete the category "${name}"?\n(It will also be removed from papers that have it.)`)) return;
   await fetch(`/api/categories/${encodeURIComponent(name)}`, { method: 'DELETE' });
   allCategories = allCategories.filter(c => c !== name);
   if (activeCat === name) {
@@ -1212,17 +1277,17 @@ async function toggleChecked(btn) {
       btn.dataset.checked = newVal;
       if (newVal === 1) {
         btn.className = 'check-btn checked';
-        btn.textContent = '✓ 확인';
-        btn.title = '확인됨 — 클릭하여 미확인으로 변경';
+        btn.textContent = '✓ Read';
+        btn.title = 'Read — click to mark as unread';
       } else {
         btn.className = 'check-btn';
-        btn.textContent = '○ 미확인';
-        btn.title = '미확인 — 클릭하여 확인으로 변경';
+        btn.textContent = '○ Unread';
+        btn.title = 'Unread — click to mark as read';
       }
       // 확인 여부 필터 중이면 목록 갱신
       if (activeChecked !== null) loadPapers();
     }
-  } catch (e) { console.error('확인 상태 저장 실패:', e); }
+  } catch (e) { console.error('Failed to save read status:', e); }
 }
 
 // ─── Toggle blocks ─────────────────────────────────────────────────────── //
@@ -1259,17 +1324,17 @@ function setBannerButton(done) {
   const btn = document.getElementById('cancel-btn');
   btn.disabled = false;
   btn.classList.toggle('done', done);
-  btn.textContent = done ? '✓ 완료' : '⏹ 중지';
+  btn.textContent = done ? '✓ Done' : '⏹ Stop';
 }
 
 async function cancelProcessing() {
   const btn = document.getElementById('cancel-btn');
   btn.disabled = true;
-  btn.textContent = '중지 중...';
+  btn.textContent = 'Stopping...';
   try {
     await fetch('/api/cancel', { method: 'POST' });
   } catch (e) {
-    console.error('중지 요청 실패:', e);
+    console.error('Stop request failed:', e);
   }
 }
 
@@ -1289,7 +1354,7 @@ async function startProcessing() {
     }
     startPolling();
   } catch (e) {
-    alert('처리 요청 실패: ' + e);
+    alert('Fetch request failed: ' + e);
     btn.disabled = false;
     document.getElementById('process-btn-icon').textContent = '📥';
   }
@@ -1312,10 +1377,10 @@ async function checkStatus() {
     if (s.is_processing) {
       if (!pollingTimer) startPolling();   // 처리 중에 화면을 새로 연 경우에도 진행 상황 갱신
       spinner.style.display = '';
-      if (!document.getElementById('cancel-btn').textContent.startsWith('중지 중')) setBannerButton(false);
+      if (!document.getElementById('cancel-btn').textContent.startsWith('Stopping')) setBannerButton(false);
     }
 
-    if (s.is_processing || (s.message !== '대기 중' && pollingTimer)) {
+    if (s.is_processing || (s.message !== 'Idle' && pollingTimer)) {
       banner.classList.remove('hidden');
       msgEl.textContent = s.message;
       const pct = s.total > 0 ? Math.round(s.current / s.total * 100) : (s.is_processing ? 20 : 100);
@@ -1330,7 +1395,7 @@ async function checkStatus() {
       document.getElementById('process-btn-icon').textContent = '📥';
       spinner.style.display = 'none';
       setBannerButton(true);
-      if (s.last_run) document.getElementById('last-run').textContent = '마지막 처리: ' + s.last_run;
+      if (s.last_run) document.getElementById('last-run').textContent = 'Last fetch: ' + s.last_run;
       if (s.errors && s.errors.length > 0) {
         document.getElementById('error-list').classList.add('visible');
         document.getElementById('error-items').innerHTML = s.errors.map(e => `<li>${esc(e)}</li>`).join('');

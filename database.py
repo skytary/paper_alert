@@ -67,7 +67,46 @@ def init_db():
         # 기본 카테고리 삽입 (없을 경우만)
         for cat in DEFAULT_CATEGORIES:
             conn.execute('INSERT OR IGNORE INTO categories (name) VALUES (?)', (cat,))
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        ''')
         conn.commit()
+
+
+# ── 설정 ─────────────────────────────────────────────────────────────────── #
+# 키와 기본값. 여기에 없는 키는 저장하지 않는다.
+DEFAULT_SETTINGS = {
+    'summary_language': 'Korean',     # 요약·데이터·주요 발견을 쓸 언어: Korean / English
+}
+SETTING_CHOICES = {
+    'summary_language': ['Korean', 'English'],
+}
+
+
+def get_settings() -> dict:
+    """저장된 설정(없으면 기본값)을 모두 돌려줌."""
+    with get_connection() as conn:
+        rows = dict(conn.execute('SELECT key, value FROM settings').fetchall())
+    return {k: rows.get(k, v) for k, v in DEFAULT_SETTINGS.items()}
+
+
+def update_settings(values: dict) -> dict:
+    """알려진 키만 검사해서 저장하고, 저장 후 전체 설정을 돌려줌. 잘못된 값은 ValueError."""
+    for key, value in values.items():
+        if key not in DEFAULT_SETTINGS:
+            raise ValueError(f'Unknown setting: {key}')
+        choices = SETTING_CHOICES.get(key)
+        if choices and value not in choices:
+            raise ValueError(f'Invalid value for {key}: {value}')
+    with get_connection() as conn:
+        for key, value in values.items():
+            conn.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                         (key, str(value)))
+        conn.commit()
+    return get_settings()
 
 
 def _migrate(conn):
