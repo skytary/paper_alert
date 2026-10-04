@@ -51,7 +51,13 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 | `gmail_client.py` | Gmail API 인증과 메일 읽기 |
 | `paper_processor.py` | Claude API로 논문 추출·점수 매기기 (프롬프트 포함) |
 | `database.py` | SQLite 저장·조회 |
-| `zotero_client.py` | Zotero Web API로 논문 추가 |
+| `zotero_client.py` | Zotero Web API로 논문 추가, 빈 서지 칸 채우기 |
+| `zotero_index.py` | Zotero 라이브러리의 DOI·제목 목록 (이미 있는 논문 확인) |
+| `zotero_targets.py` | Zotero로 보낼 컬렉션 정하기 (루트 / 컬렉션 / 카테고리 / 기준 파일) |
+| `enrich.py` | Crossref·OpenAlex로 DOI·초록 보강 |
+| `batch_processor.py` | 배치 처리 (Message Batches API, 반값) |
+| `version.py` | 버전·제작자 정보 (About 창) |
+| `static/owl.png` | About 창 그림 |
 | `templates/index.html` | 화면(단일 페이지) |
 | `launch.pyw` | pywebview 창과 트레이 아이콘으로 앱을 띄우는 런처 |
 | `create_shortcut.py` | 앱 폴더·시작 메뉴·작업표시줄 바로가기 생성 |

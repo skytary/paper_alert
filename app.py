@@ -189,6 +189,20 @@ def auto_send_to_zotero(new_ids: list[tuple[int, int]], errors: list | None = No
     return sent
 
 
+# ── About ────────────────────────────────────────────────────────────────── #
+
+@app.route('/api/about')
+def get_about():
+    import version
+    license_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'LICENSE')
+    try:
+        license_text = open(license_path, encoding='utf-8').read()
+    except OSError:
+        license_text = 'MIT License'
+    return jsonify({'name': version.APP_NAME, 'version': version.VERSION, 'author': version.AUTHOR,
+                    'history': version.HISTORY, 'license': license_text})
+
+
 # ── 배치 처리 ─────────────────────────────────────────────────────────────── #
 
 @app.route('/api/batch', methods=['GET'])

@@ -96,6 +96,17 @@
     .settings-saved { color: #16a34a; font-size: .8rem; min-height: 1.2em; margin-top: 8px; }
     .collection-select { max-width: 320px; }
     #settings-modal .modal { width: 680px; }
+    #about-modal .modal { width: 560px; }
+    #about-modal .modal-body { overflow-y: auto; font-size: .88rem; line-height: 1.5; }
+    .about-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+    .about-head img { width: 72px; height: 72px; }
+    .about-name { font-size: 1.3rem; font-weight: 800; }
+    .about-section { margin-top: 14px; }
+    .about-section h4 { font-size: .9rem; margin-bottom: 4px; }
+    .about-section ul { margin: 2px 0 8px 18px; }
+    .about-license { white-space: pre-wrap; font-size: .75rem; color: var(--c-muted);
+                     background: var(--c-bg); padding: 8px; border-radius: 6px; margin-top: 6px; }
+    .about-license.hidden { display: none; }
     #settings-modal .modal-body { overflow-y: auto; }
 
     /* ── Status Banner ── */
@@ -708,6 +719,7 @@
           title="Click to check batch results now"></span>
     <span id="last-run" style="font-size:.78rem;opacity:.65;"></span>
     <button class="btn btn-settings" onclick="openSettings()" title="Settings">⚙ Settings</button>
+    <button class="btn btn-settings" onclick="openAbout()" title="About PaperAlert">ⓘ About</button>
     <button class="btn btn-primary" id="process-btn" onclick="startProcessing()">
       <span id="process-btn-icon">📥</span>
       Fetch
@@ -821,6 +833,17 @@
     </div>
   </div>
 </main>
+
+<!-- About Modal -->
+<div class="modal-overlay hidden" id="about-modal" onclick="if (event.target === this) closeAbout()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>ⓘ About</h3>
+      <button class="modal-close" onclick="closeAbout()">✕</button>
+    </div>
+    <div class="modal-body" id="about-body">Loading...</div>
+  </div>
+</div>
 
 <!-- Settings Modal -->
 <div class="modal-overlay hidden" id="settings-modal" onclick="if (event.target === this) closeSettings()">
@@ -1285,6 +1308,49 @@ async function savePaperCategories(paperId) {
 }
 
 // ─── Category Manager Modal ────────────────────────────────────────────── //
+// ─── About ─────────────────────────────────────────────────────────────── //
+async function openAbout() {
+  document.getElementById('about-modal').classList.remove('hidden');
+  const body = document.getElementById('about-body');
+  try {
+    const d = await fetch('/api/about').then(r => r.json());
+    const a = d.author;
+    body.innerHTML = `
+      <div class="about-head">
+        <img src="/static/owl.png" alt="">
+        <div>
+          <div class="about-name">${esc(d.name)}</div>
+          <div>Version ${esc(d.version)}</div>
+        </div>
+      </div>
+      <div class="about-section">
+        <h4>Author</h4>
+        <div>${esc(a.name)}</div>
+        <div>${esc(a.affiliation)}</div>
+        <div><a href="mailto:${esc(a.email)}">${esc(a.email)}</a></div>
+        <div><a href="${esc(a.github)}" target="_blank" rel="noopener">${esc(a.github)}</a></div>
+      </div>
+      <div class="about-section">
+        <h4>Version history</h4>
+        ${d.history.map(h => `
+          <div><b>${esc(h.version)}</b> <span style="color:var(--c-muted)">(${esc(h.date)})</span></div>
+          <ul>${h.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`).join('')}
+      </div>
+      <div class="about-section">
+        <h4>License</h4>
+        <div>Released under the MIT License.
+          <a href="#" onclick="document.getElementById('about-license').classList.toggle('hidden'); return false;">Show full text</a></div>
+        <div class="about-license hidden" id="about-license">${esc(d.license)}</div>
+      </div>`;
+  } catch (e) {
+    body.textContent = 'Could not load information: ' + e;
+  }
+}
+
+function closeAbout() {
+  document.getElementById('about-modal').classList.add('hidden');
+}
+
 // ─── Batch ─────────────────────────────────────────────────────────────── //
 let lastBatchEmails = 0;
 
