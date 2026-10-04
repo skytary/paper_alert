@@ -122,6 +122,18 @@ def put_settings():
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/pending')
+def get_pending():
+    """기다리는 메일 수: 기준 날짜를 적용한 수와 적용하지 않은 수."""
+    try:
+        settings = database.get_settings()
+        waiting = len(_pending_email_ids(settings))
+        everything = len(_pending_email_ids({**settings, 'start_date': ''}))
+        return jsonify({'waiting': waiting, 'all_unread': everything})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── 카테고리 관리 ─────────────────────────────────────────────────────────── #
 
 @app.route('/api/categories', methods=['GET'])
@@ -196,10 +208,15 @@ def _process_emails_background():
     )
 
     try:
-        # 1단계: ID 목록만 가져옴 (읽음 처리 안함)
-        email_ids = gmail_client.list_unread_email_ids()
+        # 1단계: ID 목록만 가져옴 (읽음 처리 안함). 설정의 기준 날짜·순서·개수를 적용
+        settings = database.get_settings()
+        pending = _pending_email_ids(settings)
+        size = settings['batch_size']
+        email_ids = pending if size == 'all' else pending[:int(size)]
         total = len(email_ids)
-        update_status(total=total, message=f'Found {total} unread alert emails.')
+        left_after = len(pending) - total     # 이번에 처리하지 않고 남는 메일 수
+        update_status(total=total, message=f'Found {len(pending)} unread alert emails; '
+                                           f'fetching {total} this time.')
 
         if total == 0:
             update_status(
@@ -218,7 +235,7 @@ def _process_emails_background():
 
             # 취소 확인
             if is_cancel_requested():
-                remaining = total - i
+                remaining = total - i + left_after
                 update_status(
                     message=f'Stopped. {processed_count} emails processed, '
                             f'{saved_total} papers saved. '
@@ -270,7 +287,8 @@ def _process_emails_background():
 
         update_status(
             message=f'Done. {processed_count} emails processed, {saved_total} papers saved '
-                    f'({skipped_total} already in the library were skipped).',
+                    f'({skipped_total} already in the library were skipped).'
+                    + (f' {left_after} emails are still waiting.' if left_after else ''),
             is_processing=False,
             errors=errors,
             last_run=_now(),
@@ -284,6 +302,16 @@ def _process_emails_background():
             errors=[str(e)],
             last_run=_now(),
         )
+
+
+def _pending_email_ids(settings: dict) -> list[str]:
+    """처리할 차례인 메일 ID: 기준 날짜 이후의 안 읽은 알림 메일 중 아직 처리하지 않은 것.
+
+    Gmail은 최신 메일부터 돌려주므로, 'oldest' 설정이면 순서를 뒤집는다.
+    """
+    done = database.processed_email_ids()
+    ids = [i for i in gmail_client.list_unread_email_ids(settings['start_date']) if i not in done]
+    return ids[::-1] if settings['fetch_order'] == 'oldest' else ids
 
 
 def _now() -> str:

@@ -80,9 +80,30 @@ def init_db():
 # 키와 기본값. 여기에 없는 키는 저장하지 않는다.
 DEFAULT_SETTINGS = {
     'summary_language': 'Korean',     # 요약·데이터·주요 발견을 쓸 언어: Korean / English
+    'start_date': '',                 # 이 날짜(YYYY-MM-DD) 이후에 받은 메일만 처리. 빈 값이면 전부
+    'batch_size': '50',               # 한 번에 처리할 메일 수. 'all'이면 전부
+    'fetch_order': 'newest',          # 처리 순서: newest(최신부터) / oldest(오래된 것부터)
 }
 SETTING_CHOICES = {
     'summary_language': ['Korean', 'English'],
+    'batch_size': ['10', '25', '50', '100', '200', '500', 'all'],
+    'fetch_order': ['newest', 'oldest'],
+}
+
+
+def _valid_date(value: str) -> bool:
+    if value == '':
+        return True
+    try:
+        datetime.strptime(value, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
+
+
+# 선택지가 아닌 값을 받는 설정의 검사 함수
+SETTING_VALIDATORS = {
+    'start_date': _valid_date,
 }
 
 
@@ -98,8 +119,11 @@ def update_settings(values: dict) -> dict:
     for key, value in values.items():
         if key not in DEFAULT_SETTINGS:
             raise ValueError(f'Unknown setting: {key}')
+        value = str(value)
+        values[key] = value
         choices = SETTING_CHOICES.get(key)
-        if choices and value not in choices:
+        validator = SETTING_VALIDATORS.get(key)
+        if (choices and value not in choices) or (validator and not validator(value)):
             raise ValueError(f'Invalid value for {key}: {value}')
     with get_connection() as conn:
         for key, value in values.items():
@@ -199,6 +223,11 @@ def is_email_processed(email_id: str) -> bool:
             'SELECT 1 FROM processed_emails WHERE email_id = ?', (email_id,)
         ).fetchone()
         return result is not None
+
+
+def processed_email_ids() -> set[str]:
+    with get_connection() as conn:
+        return {r[0] for r in conn.execute('SELECT email_id FROM processed_emails')}
 
 
 def mark_email_processed(email_id: str, papers_found: int):

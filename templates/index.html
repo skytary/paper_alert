@@ -831,6 +831,31 @@
         </div>
         <select id="setting-summary_language" onchange="saveSetting('summary_language', this.value)"></select>
       </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Start date</div>
+          <div class="settings-help">Fetch only alert emails received on or after this date. Older unread emails are left untouched in Gmail; clear the date to include them again.</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="date" id="setting-start_date" onchange="saveSetting('start_date', this.value)">
+          <button class="btn-ghost" onclick="clearStartDate()">Clear</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Emails per fetch</div>
+          <div class="settings-help">How many emails one click of Fetch processes. Each email costs about $0.04.</div>
+        </div>
+        <select id="setting-batch_size" onchange="saveSetting('batch_size', this.value)"></select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Fetch order</div>
+          <div class="settings-help">Which waiting emails to process first.</div>
+        </div>
+        <select id="setting-fetch_order" onchange="saveSetting('fetch_order', this.value)"></select>
+      </div>
+      <div class="settings-help" id="pending-info" style="margin-top:10px;"></div>
       <div class="settings-saved" id="settings-saved"></div>
     </div>
   </div>
@@ -1171,16 +1196,42 @@ async function savePaperCategories(paperId) {
 
 // ─── Category Manager Modal ────────────────────────────────────────────── //
 // ─── Settings ──────────────────────────────────────────────────────────── //
+// 선택지의 화면 표시 이름 (없으면 값 그대로)
+const SETTING_LABELS = {
+  batch_size: { all: 'All' },
+  fetch_order: { newest: 'Newest first', oldest: 'Oldest first' },
+};
+
 async function openSettings() {
   const data = await fetch('/api/settings').then(r => r.json());
   for (const [key, choices] of Object.entries(data.choices)) {
     const sel = document.getElementById('setting-' + key);
     if (!sel) continue;
-    sel.innerHTML = choices.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    const labels = SETTING_LABELS[key] || {};
+    sel.innerHTML = choices.map(c => `<option value="${esc(c)}">${esc(labels[c] || c)}</option>`).join('');
     sel.value = data.settings[key];
   }
+  document.getElementById('setting-start_date').value = data.settings.start_date || '';
   document.getElementById('settings-saved').textContent = '';
   document.getElementById('settings-modal').classList.remove('hidden');
+  loadPendingInfo();
+}
+
+async function loadPendingInfo() {
+  const el = document.getElementById('pending-info');
+  el.textContent = 'Counting waiting emails...';
+  try {
+    const d = await fetch('/api/pending').then(r => r.json());
+    if (d.error) { el.textContent = 'Could not count waiting emails: ' + d.error; return; }
+    el.textContent = d.waiting === d.all_unread
+      ? `${d.waiting} unread alert emails are waiting.`
+      : `${d.waiting} unread alert emails are waiting since the start date (${d.all_unread} in total, including older ones).`;
+  } catch (e) { el.textContent = ''; }
+}
+
+function clearStartDate() {
+  document.getElementById('setting-start_date').value = '';
+  saveSetting('start_date', '');
 }
 
 function closeSettings() {
@@ -1198,6 +1249,7 @@ async function saveSetting(key, value) {
     const data = await res.json();
     msg.style.color = data.error ? '#dc2626' : '';
     msg.textContent = data.error ? data.error : 'Saved.';
+    if (!data.error && key === 'start_date') loadPendingInfo();
   } catch (e) {
     msg.style.color = '#dc2626';
     msg.textContent = 'Could not save: ' + e;

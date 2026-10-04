@@ -2,6 +2,7 @@
 import os
 import re
 import base64
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -147,8 +148,11 @@ def get_email_content_by_id(email_id: str) -> dict:
     return get_email_content(get_gmail_service(), email_id)
 
 
-def list_unread_email_ids() -> list[str]:
-    """'논문_알리미' 라벨의 미읽은 이메일 ID 목록만 반환 (읽음 처리 안함)."""
+def list_unread_email_ids(start_date: str = '') -> list[str]:
+    """'논문_알리미' 라벨의 미읽은 이메일 ID를 모두 반환 (최신 메일부터, 읽음 처리 안함).
+
+    start_date('YYYY-MM-DD')를 주면 그날 0시(이 컴퓨터 시간대) 이후에 받은 메일만 돌려준다.
+    """
     service = get_gmail_service()
     label_id = get_label_id(service, GMAIL_LABEL)
 
@@ -158,13 +162,24 @@ def list_unread_email_ids() -> list[str]:
             "Create the label in Gmail first."
         )
 
-    results = service.users().messages().list(
-        userId='me',
-        labelIds=[label_id, 'UNREAD'],
-        maxResults=50,
-    ).execute()
+    query = None
+    if start_date:
+        # Gmail 검색의 after:는 초 단위 시각을 받으면 시간대 혼동이 없음
+        query = f'after:{int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())}'
 
-    return [msg['id'] for msg in results.get('messages', [])]
+    ids, page_token = [], None
+    while True:
+        results = service.users().messages().list(
+            userId='me',
+            labelIds=[label_id, 'UNREAD'],
+            q=query,
+            maxResults=500,
+            pageToken=page_token,
+        ).execute()
+        ids += [msg['id'] for msg in results.get('messages', [])]
+        page_token = results.get('nextPageToken')
+        if not page_token:
+            return ids
 
 
 def mark_email_read(email_id: str):
