@@ -30,3 +30,6 @@ PaperAlert.lnk
 
 # DB 백업
 _backup/
+
+# 개인 작업 기록 (공개 저장소에 올리지 않음)
+업데이트_계획.md
