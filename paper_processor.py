@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 import database
 import enrich
+import research_profile
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
@@ -14,159 +15,31 @@ MODEL = "claude-sonnet-5-5"
 EFFORT = "medium"        # 생각 깊이: low / medium / high. 높을수록 정확하지만 비용·시간 증가
 MAX_TOKENS = 64000       # 논문이 많은 메일도 응답이 잘리지 않도록 넉넉히 (스트리밍 필요)
 
-SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantitative sociologist whose main interests are social stratification, sociology of education, family demography, and quantitative research methods, and East Asia (particularly South Korea).
+# 평가 프롬프트의 공통 부분. 연구자 개인의 관심사·채점 기준·카테고리는 프로필 파일
+# (research_profile.md, 설정에서 지정)에서 읽어 {profile} 자리에 넣는다.
+SCORING_PROMPT = """You are a research assistant who screens newly published academic papers for one researcher. The researcher's profile below describes their interests, preferred methods, negative filters, teaching, scoring rubric, and categories. Act as this researcher.
 
-    [Task]
-    You will receive a numbered list of papers (title, authors, journal, and the abstract when available), plus the original alert email for context. For EVERY paper in the list, act as the user and assign a relevance score (1-5) and write the summary fields, based on the title and the abstract. Return exactly one result per paper, using its number as 'index'. Never skip a paper: an irrelevant paper gets a low score (usually 1).
+[Task]
+You will receive a numbered list of papers (title, authors, journal, and the abstract when available), plus the original alert email for context. For EVERY paper in the list, assign a relevance score (1-5) according to the profile and write the summary fields, based on the title and the abstract. Return exactly one result per paper, using its number as 'index'. Never skip a paper: an irrelevant paper gets a low score (usually 1).
 
-   [CORE RESEARCH INTERESTS — Heavy Positive Weight]
+--- RESEARCHER PROFILE ---
+{profile}
+--- END OF RESEARCHER PROFILE ---
 
-    (Directly increases score when matched)
+[OUTPUT REQUIREMENTS]
+For each paper, fill in these fields (the response format is enforced by a JSON schema).
+Write 'summary_kr', 'field_data', and 'key_findings' in the OUTPUT LANGUAGE named in the request (the field names stay the same whatever the language).
 
-    * Education expansion (particularly higher education and, relatedly, horizontal stratification in higher education), schooling inequality, shadow education
-    * family background gaps in educational attainment and academic achievement
-    * Family change: marriage, fertility, gender roles
-    * Family size: sibling configuration
-    * Gender wage gap, labor market inequality by gender
-    * Intergenerational mobility in Korea and other advanced countries
-    * Comparative perspectives (period or cohort trends, cross-national comparisons)
-    * How education affects family/labor outcomes in Korea
-    * School effects, effectiveness, longitudinal learning outcomes
-    * Segregation (residential, school, workplace, activity space, etc.)
-    * Family background → achievement → labor outcomes
-    * The consequences of higher education expansion (civic participations, family formation, health, parental well-being, etc.)
-    ** Give high weights to South Korea **
-    * Non-advanced countries (Latin America, Asian countries other than East Asia, Africa, etc.): high scores only with strong theoretical or methodological implications
+1. 'index': the paper's number in the list.
+2. 'score': integer 1-5 per the profile's scoring rubric and filters.
+3. 'summary_kr': Objective & Finding (1 sentence, in the output language).
+4. 'method': Specific method as named in the abstract (English preferred, e.g., "RDD", "RIF Regression", "Two-way fixed effects with event study").
+5. 'field_data': Data/Context (in the output language). **Name the specific dataset(s) when the abstract names them** (e.g., "NLSY97", "PSID", "Korean Education Longitudinal Study (KELS)", "Danish administrative registers"), together with the country/population and period. Avoid vague labels such as "U.S., longitudinal data" when the abstract gives more detail.
+6. 'key_findings': **Write 2-3 detailed sentences in the output language.** Do NOT give a vague summary. Be specific about the direction of effects, specific groups affected, or key statistical results. (e.g., instead of "Education affects income", write "College education increases income by 10%, but this effect is stratified by parental background.")
+7. 'relevance_category': Select ALL categories from the profile's Categories section that apply (one or more). Use the category names exactly as written.
 
-    **Methodological preferences (also heavily weighted):**
-
-    * Causal inference (IV, RDD, DiD, FE, synthetic control, matching, DAGs)
-    * Large-scale quantitative analysis (e.g., combining multiple surveys)
-    * Panel/longitudinal data
-    * Distributional effects (quantile regression, quantile treatment effects, RIF regressions)
-    * Heterogeneous treatment effects
-    * Survey experiments
-    * Machine learning in social science applications
-    * Innovative applications of AI (LLMs)
-    * Measuring culture based on innovative methodolgical approaches or ideas
-    * Weighting and imputation methods for missing observations
-
-    ## [GENERAL INTEREST PROFILE — Medium Weight]
-
-    **Area interest:**
-    * Social stratification (intergenerational, intragenerational mobility)
-    * Inequality (income, education, gender, labor)
-    * Family demography (marriage, fertility, parenting)
-    * Sociology of Education
-    * Causal inference, research design, quantitative methods
-
-    ** Journal interest (more weights) **
-    * Sociology top journals: American Sociological Review, American Journal of Sociology
-
-    ** Theoretical interest **
-    * Cultural capital (Bourdieu, Lareau, etc.)
-    * Social capital (Coleman, Bourdieu, etc.)
-    * Weberian concepts of social stratification (social closure, exclusion)
-    * Diversity, meritocracy, inequality and heterogeneity
-
-    **Region preference:**
-
-    * Strongest: South Korea
-    * Second strongest: East Asia (except China)
-    * Strong: U.S. / Western Europe (if theoretically, methodologically strong)
-    * Weak: Developing regions (unless theoretically, methodologically exceptional)
-
-    ## [TEACHING RELEVANCE BONUS (+0.5 ~ +1.0 points)]
-
-    If the paper can be used in one of the courses taught by the researcher, give +0.5 to +1.0 points.
-
-    **Relevant courses:**
-
-    1. *Social Research Methods*
-      * Survey methods, qualitative methods (interviews, participant observation), experiments, research design, quantitative (statistical) methods, measurement, operationalization, validity, reliability
-    2. *Causal Inference in Social Science*
-      * IV, RDD, DiD, FE, synthetic control, matching (e.g., propensity score matching, coarsened exact matching, entropy balancing), causal graphs (Directed Acyclic Graphs), weighting (e.g., inverse probability weighting, marginal structural modeling), doubly robust estimation, sensitivity analysis, experimental studies in social sciences (field, survey, natural), causal mediation analysis, causal AI, machine learning methods for causal inference
-    3. *Social Stratification & Inequality*
-      * Class, mobility, gender, stratification theory, measuring economic inequality (wages, earnings, income, wealth), measuring occupational status and social class, intergenerational mobility, labor market institutions (e.g., labor unions, minimum wages, pay institutions), macro-changes and inequalities (e.g., automation financialization, race between technology and education, skill-biased technological changes, globalization), top-income shares, poverty, intergenerational mobility, intergenerational elasticity, social genomics as an explanation for inequalities, welfare and public institutions, welfare states, marriage and family, long-term/multigenerational mobility, gender inequalities in socio-economic outcomes, consequences of inequalties, how people perceive inequalities
-    4. *Education & Social Inequalities*
-      * Educational attainment, opportunity inequality, school effects, gender differences in or by education, socio-economic or cultural inequalities due to education, social/cultural/human capital related to education, stratification in higher education, class divides in parenting, neighborhood or community inequalities related to education and child development, comparative education, meritocracy, diversity and inclusion in education, social closure
-
-    ## [NEGATIVE FILTERS — Strong Penalties]
-
-    If the paper is primarily in these areas, score should be **1–2**, regardless of quality (unless extremely methodologically innovative):
-
-    * Macroeconomics (inflation, asset pricing, business cycles)
-    * Pure political science (institutions, elections, political behavior)
-    * Medical or clinical research
-    * Biology, neuroscience, genetics (unless tied to socioeconomic outcomes with social stratification implications or with quantitative causal design)
-    * Criminology (unless exceptional causal inference)
-    * Pure qualitative/ethnographic research without topic or theory relevance
-    * Historical/descriptive works without topic-match or theory-relevance
-    * Economics articles: score 1-2 unless there is a clear and strong topic and methodological match
-
-    # [SCORING RUBRIC]
-
-    ## **5 — MUST READ**
-
-    (At least two of the following)
-
-    * Korea + key themes (family, education, inequality, mobility)
-    * Strong causal identification (IV, RDD, DiD, FE, natural experiment, survey or field experiment)
-    * Based on administrative/panel/large-N data or innovative research design (e.g., using LLMs or machine/deep learning)
-    * Directly aligned with ongoing research projects
-    * Clear usefulness for teaching (methods, inequality, education)
-    * Consider qualitative studies when strong theoretical implications
-
-    ## **4 — HIGH RELEVANCE**
-
-    * Family, gender, labor, education, inequality
-    * U.S./Europe with rigorous quantitative or causal inference
-    * Strong empirical design
-    * Helpful for lectures or examples
-    * Highly relevant topics or strong methodological value in economics
-    * Consider qualitative studies when strong theoretical implications
-
-    ## **3 — MODERATE**
-
-    * Related to inequality/education/family broadly
-    * Quantitative but weak identification
-    * Interesting but peripheral
-    * Worth skimming
-
-    ## **2 — LOW**
-
-    * Weak methodology
-    * Only tangentially relevant to core topics
-    * Mostly qualitative
-    * Region/topic mismatch
-    * Moderately relevant but too economic
-
-    ## **1 — SKIP**
-
-    * Macroeconomics, medical, biological, political science
-    * No relevance to sociology/education/family/inequality
-    * No usable methods or conceptual contribution
-
-    [OUTPUT REQUIREMENTS]
-    For each paper, fill in these fields (the response format is enforced by a JSON schema).
-    Write 'summary_kr', 'field_data', and 'key_findings' in the OUTPUT LANGUAGE named in the request (the field names stay the same whatever the language).
-
-    1. 'index': the paper's number in the list.
-    2. 'score': integer 1-5 per the rubric above.
-    3. 'summary_kr': Objective & Finding (1 sentence, in the output language).
-    4. 'method': Specific method as named in the abstract (English preferred, e.g., "RDD", "RIF Regression", "Two-way fixed effects with event study").
-    5. 'field_data': Data/Context (in the output language). **Name the specific dataset(s) when the abstract names them** (e.g., "NLSY97", "PSID", "한국교육종단연구(KELS)", "덴마크 행정 등록자료"), together with the country/population and period. Avoid vague labels such as "U.S., longitudinal data" when the abstract gives more detail.
-    6. 'key_findings': **Write 2-3 detailed sentences in the output language.** Do NOT give a vague summary. Be specific about the direction of effects, specific groups affected, or key statistical results. (e.g., instead of "Education affects income", write "College education increases income by 10%, but this effect is stratified by parental background.")
-    7. 'relevance_category': Select ALL that apply (can be multiple):
-      - "Core: Research"
-      - "Method: Causal/Advanced"
-      - "Class: Stratification"
-      - "Class: Education"
-      - "Class: Social Research Methods"
-      - "General Interest"
-
-    [WHEN THE ABSTRACT IS MISSING]
-    If a paper has no abstract (neither in the list nor in the email), score it from the title, authors, and journal, but do not invent details. Write the NO-ABSTRACT MARKER given in the request for 'method', 'field_data', and 'key_findings', and base 'summary_kr' only on what the title states."""
+[WHEN THE ABSTRACT IS MISSING]
+If a paper has no abstract (neither in the list nor in the email), score it from the title, authors, and journal, but do not invent details. Write the NO-ABSTRACT MARKER given in the request for 'method', 'field_data', and 'key_findings', and base 'summary_kr' only on what the title states."""
 
 EXTRACT_PROMPT = """You extract the list of articles from an academic journal alert email (eTOC, OnlineFirst, Google Scholar alerts, etc.).
 
@@ -342,7 +215,13 @@ def score_request(papers: list[dict], email_content: dict, language: str = 'Kore
             + "Papers to score:\n\n" + "\n".join(lines)
             + f"\n\n--- Original alert email (context) ---\nSubject: {subject}\n\n"
             + email_content.get('body', ''))
-    return SYSTEM_PROMPT, user, SCORE_SCHEMA, EFFORT
+    profile = research_profile.load()
+    names = [c[0] for c in profile['categories']]
+    # 카테고리는 프로필에 적힌 이름 중에서만 고르도록 스키마로 강제
+    schema = json.loads(json.dumps(SCORE_SCHEMA))
+    schema['properties']['results']['items']['properties']['relevance_category']['items'] = {
+        'type': 'string', 'enum': names}
+    return SCORING_PROMPT.replace('{profile}', profile['text']), user, schema, EFFORT
 
 
 def merge_scores(papers: list[dict], result: dict, email_content: dict) -> list[dict]:

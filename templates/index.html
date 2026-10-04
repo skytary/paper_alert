@@ -854,6 +854,17 @@
     </div>
     <div class="modal-body">
       <div class="settings-row">
+        <div style="flex:1;min-width:0;">
+          <div class="settings-label">Research profile</div>
+          <div class="settings-help">Your research interests, scoring rubric, and categories. Claude scores every new paper against this file. Start from research_profile.template.md.</div>
+          <div class="settings-help" id="profile-info" style="margin-top:4px;"></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="setting-research_profile_file" style="width:180px;">
+          <button class="btn-ghost" onclick="saveProfileFile()">Save</button>
+        </div>
+      </div>
+      <div class="settings-row">
         <div>
           <div class="settings-label">Summary language</div>
           <div class="settings-help">Language for the summary, data, and key findings of newly fetched papers. Papers already in the library keep their language.</div>
@@ -1196,7 +1207,7 @@ function paperCard(p) {
   const zoteroBtn = appSettings.zotero_enabled !== 'on' ? ''
     : (p.added_to_zotero && p.zotero_key)
       ? `<button class="btn btn-sm btn-outline zotero-done" onclick="openInZotero('${esc(p.zotero_key)}')"
-            title="Already in Zotero — click to show it in the Zotero app">✓ In Zotero</button>`
+            title="Already in Zotero. Click to show it in the Zotero app">✓ In Zotero</button>`
       : `<button class="btn btn-sm btn-outline" id="zbtn-${p.id}" onclick="sendToZotero(${p.id}, this)"
             title="Add this paper to your Zotero library">➜ Zotero</button>`;
 
@@ -1206,7 +1217,7 @@ function paperCard(p) {
       data-paper-id="${p.id}"
       data-checked="${isChecked ? 1 : 0}"
       onclick="toggleChecked(this)"
-      title="${isChecked ? 'Read — click to mark as unread' : 'Unread — click to mark as read'}"
+      title="${isChecked ? 'Read. Click to mark as unread' : 'Unread. Click to mark as read'}"
     >${isChecked ? '✓ Read' : '○ Unread'}</button>`;
 
   return `<div class="paper-card" id="card-${p.id}">
@@ -1219,7 +1230,7 @@ function paperCard(p) {
         <div class="score-wrap">
           <div class="score-badge s${sc}" id="sbadge-${p.id}"
                onclick="toggleScorePicker(event,${p.id})"
-               title="${SCORE_LABELS[sc]} — click to change">${sc}</div>
+               title="${SCORE_LABELS[sc]}. Click to change">${sc}</div>
           <div class="score-picker hidden" id="spicker-${p.id}">
             ${[1,2,3,4,5].map(n =>
               `<button class="sp-btn s${n}" onclick="saveScore(event,${p.id},${n})">${n}</button>`
@@ -1265,7 +1276,7 @@ async function saveScore(event, paperId, score) {
       const badge = document.getElementById(`sbadge-${paperId}`);
       badge.className = `score-badge s${score}`;
       badge.textContent = score;
-      badge.title = `${SCORE_LABELS[score]} — click to change`;
+      badge.title = `${SCORE_LABELS[score]}. Click to change`;
       loadStats();
     }
   } catch (e) { console.error('Failed to save score:', e); }
@@ -1394,8 +1405,8 @@ async function sendToZotero(paperId, btn) {
     btn.title = data.existing
       ? 'This paper was already in your Zotero library, so no new item was created'
         + (data.filled && data.filled.length ? ` (filled in: ${data.filled.join(', ')})` : '')
-        + ' — click to show it in the Zotero app'
-      : 'Added to Zotero — click to show it in the Zotero app';
+        + '. Click to show it in the Zotero app'
+      : 'Added to Zotero. Click to show it in the Zotero app';
     btn.onclick = () => openInZotero(data.zotero_key);
     btn.disabled = false;
   } catch (e) {
@@ -1472,6 +1483,24 @@ function saveRules() {
   saveSetting('zotero_rules', JSON.stringify(rules));
 }
 
+async function loadProfileInfo() {
+  const el = document.getElementById('profile-info');
+  try {
+    const d = await fetch('/api/profile').then(r => r.json());
+    el.style.color = d.ok ? '' : '#dc2626';
+    el.textContent = d.ok ? `Categories: ${d.categories.join(', ')}` : d.error;
+  } catch (e) { el.textContent = ''; }
+}
+
+async function saveProfileFile() {
+  await saveSetting('research_profile_file', document.getElementById('setting-research_profile_file').value.trim());
+  await loadProfileInfo();
+  // 프로필의 카테고리가 목록에 추가됐을 수 있으니 갱신
+  allCategories = await fetch('/api/categories').then(r => r.json());
+  populateCatFilterDropdown();
+  loadStats();
+}
+
 async function saveCriteriaFile() {
   await saveSetting('zotero_criteria_file', document.getElementById('setting-zotero_criteria_file').value.trim());
   loadCriteriaInfo();
@@ -1531,6 +1560,8 @@ async function openSettings() {
     sel.value = data.settings[key];
   }
   document.getElementById('setting-start_date').value = data.settings.start_date || '';
+  document.getElementById('setting-research_profile_file').value = data.settings.research_profile_file || '';
+  loadProfileInfo();
   document.getElementById('settings-saved').textContent = '';
   document.getElementById('settings-modal').classList.remove('hidden');
   appSettings = data.settings;
@@ -1656,11 +1687,11 @@ async function toggleChecked(btn) {
       if (newVal === 1) {
         btn.className = 'check-btn checked';
         btn.textContent = '✓ Read';
-        btn.title = 'Read — click to mark as unread';
+        btn.title = 'Read. Click to mark as unread';
       } else {
         btn.className = 'check-btn';
         btn.textContent = '○ Unread';
-        btn.title = 'Unread — click to mark as read';
+        btn.title = 'Unread. Click to mark as read';
       }
       // 확인 여부 필터 중이면 목록 갱신
       if (activeChecked !== null) loadPapers();

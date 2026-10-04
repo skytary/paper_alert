@@ -7,14 +7,9 @@ from datetime import datetime
 
 DB_PATH = 'papers.db'
 
-DEFAULT_CATEGORIES = [
-    "Core: Research",
-    "Method: Causal/Advanced",
-    "Class: Stratification",
-    "Class: Education",
-    "Class: Social Research Methods",
-    "General Interest",
-]
+# 카테고리는 연구 관심사 프로필(research_profile.md)의 Categories 절에서 읽어 추가한다
+# (research_profile.sync_categories). 여기에는 기본값을 두지 않는다.
+DEFAULT_CATEGORIES: list[str] = []
 
 
 def get_connection():
@@ -81,6 +76,7 @@ def init_db():
 # 키와 기본값. 여기에 없는 키는 저장하지 않는다.
 DEFAULT_SETTINGS = {
     'summary_language': 'Korean',     # 요약·데이터·주요 발견을 쓸 언어: Korean / English
+    'research_profile_file': 'research_profile.md',  # 연구 관심사 프로필 (앱 폴더 기준 상대 경로 가능)
     'start_date': '',                 # 이 날짜(YYYY-MM-DD) 이후에 받은 메일만 처리. 빈 값이면 전부
     'batch_size': '50',               # 한 번에 처리할 메일 수. 'all'이면 전부
     'fetch_order': 'newest',          # 처리 순서: newest(최신부터) / oldest(오래된 것부터)
@@ -137,6 +133,7 @@ SETTING_VALIDATORS = {
     'zotero_fallback_collection': _valid_collection_key,
     'zotero_rules': _valid_rules,
     'zotero_criteria_file': lambda v: v.strip() != '',
+    'research_profile_file': lambda v: v.strip() != '',
 }
 
 

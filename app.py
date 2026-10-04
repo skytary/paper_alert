@@ -23,11 +23,16 @@ import zotero_client
 import zotero_index
 import zotero_targets
 import batch_processor
+import research_profile
 
 app = Flask(__name__)
 database.init_db()
 zotero_index.init_tables()
 batch_processor.init_tables()
+try:
+    research_profile.sync_categories()   # 프로필의 카테고리를 목록에 추가
+except research_profile.ProfileError:
+    pass                                 # 프로필이 아직 없으면 Fetch 때 안내함
 
 # ── 처리 상태 ─────────────────────────────────────────────────────────── #
 _status = {
@@ -263,9 +268,20 @@ def get_settings():
 @app.route('/api/settings', methods=['PUT'])
 def put_settings():
     try:
-        return jsonify({'settings': database.update_settings(request.json or {})})
+        settings = database.update_settings(request.json or {})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    if 'research_profile_file' in (request.json or {}):
+        try:
+            research_profile.sync_categories(settings)
+        except research_profile.ProfileError:
+            pass   # 상태는 /api/profile에서 보여 줌
+    return jsonify({'settings': settings})
+
+
+@app.route('/api/profile', methods=['GET'])
+def get_profile():
+    return jsonify(research_profile.status())
 
 
 @app.route('/api/pending')
@@ -352,6 +368,14 @@ def _process_emails_background():
         errors=[],
         message='Getting unread alert emails from Gmail...',
     )
+
+    # 연구 관심사 프로필이 없거나 잘못됐으면 메일을 건드리기 전에 멈춤
+    try:
+        research_profile.sync_categories()
+    except research_profile.ProfileError as e:
+        update_status(message=f'Research profile problem: {e}', is_processing=False,
+                      errors=[str(e)], last_run=_now())
+        return
 
     try:
         # 1단계: ID 목록만 가져옴 (읽음 처리 안함). 설정의 기준 날짜·순서·개수를 적용
