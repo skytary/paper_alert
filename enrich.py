@@ -97,12 +97,22 @@ def _openalex_abstract(doi: str) -> str | None:
     if not index:
         return None
     words = sorted((pos, word) for word, positions in index.items() for pos in positions)
-    return ' '.join(word for _, word in words) or None
+    text = ' '.join(word for _, word in words)
+    return re.sub(r'^(Abstract|ABSTRACT)[:.]?\s+', '', text) or None
 
 
 def _crossref_by_doi(doi: str) -> dict | None:
     data = _get(f'{CROSSREF}/{doi}')
     return (data or {}).get('message')
+
+
+def crossref_work(doi: str) -> dict | None:
+    """DOI의 Crossref 서지 정보(message). 없거나 오류면 None."""
+    return _crossref_by_doi(doi)
+
+
+def crossref_year(item: dict) -> int | None:
+    return _year(item)
 
 
 def _crossref_search(title: str, journal: str | None, authors: str | None) -> dict | None:

@@ -16,8 +16,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import database
+import enrich
 import gmail_client
 import paper_processor
+import zotero_client
 
 app = Flask(__name__)
 database.init_db()
@@ -105,6 +107,51 @@ def cancel_processing():
             return jsonify({'error': 'No fetch is running.'}), 400
         _status['cancel_requested'] = True
     return jsonify({'message': 'Stop requested.'})
+
+
+# ── Zotero ──────────────────────────────────────────────────────────────── #
+
+def send_paper_to_zotero(paper_id: int) -> str:
+    """논문 하나를 Zotero로 보내고 항목 키를 돌려줌. 이미 보낸 논문이면 기존 키를 돌려줌.
+
+    DOI가 없으면 보내기 전에 Crossref/OpenAlex로 찾아 DB에도 채운다.
+    """
+    paper = database.get_paper_by_id(paper_id)
+    if paper is None:
+        raise ValueError('Paper not found.')
+    if paper.get('added_to_zotero') and paper.get('zotero_key'):
+        return paper['zotero_key']
+    if not paper.get('doi'):
+        found = enrich.enrich(paper)
+        if found.get('doi'):
+            database.update_paper_metadata(paper_id, found.get('doi'), found.get('abstract'),
+                                           found.get('year'))
+            paper = database.get_paper_by_id(paper_id)
+    key = zotero_client.add_paper(paper)
+    database.mark_paper_in_zotero(paper_id, key)
+    return key
+
+
+@app.route('/api/zotero/open/<key>', methods=['POST'])
+def open_in_zotero(key):
+    """Zotero 데스크톱 앱에서 해당 항목을 선택해 보여 줌 (zotero:// 링크를 Windows에 넘김)."""
+    if not key.isalnum():
+        return jsonify({'error': 'Invalid key.'}), 400
+    try:
+        os.startfile(f'zotero://select/library/items/{key}')
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/papers/<int:paper_id>/zotero', methods=['POST'])
+def post_paper_to_zotero(paper_id):
+    if database.get_settings()['zotero_enabled'] != 'on':
+        return jsonify({'error': 'Zotero is turned off in Settings.'}), 400
+    try:
+        return jsonify({'success': True, 'zotero_key': send_paper_to_zotero(paper_id)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ── 설정 ─────────────────────────────────────────────────────────────────── #
@@ -228,6 +275,7 @@ def _process_emails_background():
 
         saved_total = 0
         skipped_total = 0
+        sent_total = 0
         processed_count = 0
         errors = []
 
@@ -269,9 +317,24 @@ def _process_emails_background():
 
                 # DB 저장
                 saved = 0
+                new_ids = []
                 for p in papers:
-                    if database.save_paper(p):
+                    paper_id = database.save_paper(p)
+                    if paper_id:
                         saved += 1
+                        new_ids.append((paper_id, p.get('interest_score') or 0))
+
+                # 설정한 점수 이상이면 Zotero로 자동 보내기 (실패해도 메일 처리는 계속)
+                settings_now = database.get_settings()
+                min_score = settings_now['zotero_auto_min_score']
+                if settings_now['zotero_enabled'] == 'on' and min_score != 'off':
+                    for paper_id, score in new_ids:
+                        if score >= int(min_score):
+                            try:
+                                send_paper_to_zotero(paper_id)
+                                sent_total += 1
+                            except Exception as e:
+                                errors.append(f'Zotero send failed (paper {paper_id}): {e}')
 
                 # 성공 후 읽음 처리 + 처리 완료 기록
                 gmail_client.mark_email_read(email_id)
@@ -288,6 +351,7 @@ def _process_emails_background():
         update_status(
             message=f'Done. {processed_count} emails processed, {saved_total} papers saved '
                     f'({skipped_total} already in the library were skipped).'
+                    + (f' {sent_total} sent to Zotero.' if sent_total else '')
                     + (f' {left_after} emails are still waiting.' if left_after else ''),
             is_processing=False,
             errors=errors,

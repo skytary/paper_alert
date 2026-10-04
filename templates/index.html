@@ -73,6 +73,7 @@
       color: var(--c-accent);
     }
     .btn-outline:hover { background: var(--c-accent-light); }
+    .btn-outline.zotero-done { color: #16a34a; }
     .btn-ghost {
       background: transparent;
       border: none;
@@ -856,6 +857,20 @@
         <select id="setting-fetch_order" onchange="saveSetting('fetch_order', this.value)"></select>
       </div>
       <div class="settings-help" id="pending-info" style="margin-top:10px;"></div>
+      <div class="settings-row" style="margin-top:12px;">
+        <div>
+          <div class="settings-label">Zotero</div>
+          <div class="settings-help">Show the "➜ Zotero" button on each paper. Turn off to hide all Zotero features.</div>
+        </div>
+        <select id="setting-zotero_enabled" onchange="saveSetting('zotero_enabled', this.value)"></select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Auto-send to Zotero</div>
+          <div class="settings-help">During Fetch, send new papers with at least this score to Zotero automatically.</div>
+        </div>
+        <select id="setting-zotero_auto_min_score" onchange="saveSetting('zotero_auto_min_score', this.value)"></select>
+      </div>
       <div class="settings-saved" id="settings-saved"></div>
     </div>
   </div>
@@ -885,6 +900,7 @@ let minScore = 1;
 let activeCat = '';
 let activeChecked = null;   // null=전체, 0=미확인, 1=확인
 let allCategories = [];
+let appSettings = {};       // 서버 설정 (Zotero 버튼 표시 여부 등)
 let pollingTimer = null;
 let searchTimer = null;
 const SCORE_LABELS = ['', 'Skip', 'Low', 'Moderate', 'High', 'Must read'];
@@ -892,6 +908,7 @@ const SCORE_LABELS = ['', 'Skip', 'Low', 'Moderate', 'High', 'Must read'];
 // ─── Init ──────────────────────────────────────────────────────────────── //
 document.addEventListener('DOMContentLoaded', async () => {
   allCategories = await fetch('/api/categories').then(r => r.json());
+  appSettings = (await fetch('/api/settings').then(r => r.json())).settings;
   populateCatFilterDropdown();
   await loadStats();
   await loadPapers();
@@ -1088,6 +1105,13 @@ function paperCard(p) {
     : `<a href="${scholarUrl}" target="_blank" rel="noopener"
           class="btn btn-sm btn-outline" style="opacity:.75" title="Search on Google Scholar">🔍 Scholar</a>`;
 
+  const zoteroBtn = appSettings.zotero_enabled !== 'on' ? ''
+    : (p.added_to_zotero && p.zotero_key)
+      ? `<button class="btn btn-sm btn-outline zotero-done" onclick="openInZotero('${esc(p.zotero_key)}')"
+            title="Already in Zotero — click to show it in the Zotero app">✓ In Zotero</button>`
+      : `<button class="btn btn-sm btn-outline" id="zbtn-${p.id}" onclick="sendToZotero(${p.id}, this)"
+            title="Add this paper to your Zotero library">➜ Zotero</button>`;
+
   const isChecked = p.is_checked === 1;
   const checkBtn = `<button class="check-btn${isChecked ? ' checked' : ''}"
       id="chk-${p.id}"
@@ -1124,6 +1148,7 @@ function paperCard(p) {
     </div>
     <div class="card-footer">
       ${linkBtn}
+      ${zoteroBtn}
       <div style="flex:1"></div>
       ${checkBtn}
     </div>
@@ -1195,11 +1220,37 @@ async function savePaperCategories(paperId) {
 }
 
 // ─── Category Manager Modal ────────────────────────────────────────────── //
+// ─── Zotero ────────────────────────────────────────────────────────────── //
+async function sendToZotero(paperId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  try {
+    const res = await fetch(`/api/papers/${paperId}/zotero`, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    btn.textContent = '✓ In Zotero';
+    btn.classList.add('zotero-done');
+    btn.title = 'Already in Zotero — click to show it in the Zotero app';
+    btn.onclick = () => openInZotero(data.zotero_key);
+    btn.disabled = false;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '➜ Zotero';
+    alert('Could not send to Zotero: ' + e.message);
+  }
+}
+
+function openInZotero(key) {
+  fetch(`/api/zotero/open/${encodeURIComponent(key)}`, { method: 'POST' });
+}
+
 // ─── Settings ──────────────────────────────────────────────────────────── //
 // 선택지의 화면 표시 이름 (없으면 값 그대로)
 const SETTING_LABELS = {
   batch_size: { all: 'All' },
   fetch_order: { newest: 'Newest first', oldest: 'Oldest first' },
+  zotero_enabled: { on: 'On', off: 'Off' },
+  zotero_auto_min_score: { off: 'Off', '5': 'Score 5', '4': 'Score 4 or higher', '3': 'Score 3 or higher' },
 };
 
 async function openSettings() {
@@ -1250,6 +1301,10 @@ async function saveSetting(key, value) {
     msg.style.color = data.error ? '#dc2626' : '';
     msg.textContent = data.error ? data.error : 'Saved.';
     if (!data.error && key === 'start_date') loadPendingInfo();
+    if (!data.error) {
+      appSettings = data.settings;
+      if (key === 'zotero_enabled') loadPapers();   // 카드의 Zotero 버튼 보이기/숨기기
+    }
   } catch (e) {
     msg.style.color = '#dc2626';
     msg.textContent = 'Could not save: ' + e;

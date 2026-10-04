@@ -83,11 +83,15 @@ DEFAULT_SETTINGS = {
     'start_date': '',                 # 이 날짜(YYYY-MM-DD) 이후에 받은 메일만 처리. 빈 값이면 전부
     'batch_size': '50',               # 한 번에 처리할 메일 수. 'all'이면 전부
     'fetch_order': 'newest',          # 처리 순서: newest(최신부터) / oldest(오래된 것부터)
+    'zotero_enabled': 'on',           # Zotero 보내기 기능 전체 켜기/끄기
+    'zotero_auto_min_score': 'off',   # Fetch 때 이 점수 이상이면 자동으로 보냄. off면 자동 보내기 안 함
 }
 SETTING_CHOICES = {
     'summary_language': ['Korean', 'English'],
     'batch_size': ['10', '25', '50', '100', '200', '500', 'all'],
     'fetch_order': ['newest', 'oldest'],
+    'zotero_enabled': ['on', 'off'],
+    'zotero_auto_min_score': ['off', '5', '4', '3'],
 }
 
 
@@ -298,6 +302,24 @@ def update_paper_checked(paper_id: int, checked: int):
     with get_connection() as conn:
         conn.execute('UPDATE papers SET is_checked = ? WHERE id = ?',
                      (1 if checked else 0, paper_id))
+        conn.commit()
+
+
+def update_paper_metadata(paper_id: int, doi: str | None, abstract: str | None, year: int | None):
+    """보강으로 찾은 DOI·초록·연도를 비어 있는 칸에만 채움."""
+    with get_connection() as conn:
+        conn.execute('''
+            UPDATE papers SET doi = COALESCE(doi, ?), abstract = COALESCE(abstract, ?),
+                              year = COALESCE(year, ?)
+            WHERE id = ?
+        ''', (doi, abstract, year, paper_id))
+        conn.commit()
+
+
+def mark_paper_in_zotero(paper_id: int, zotero_key: str):
+    with get_connection() as conn:
+        conn.execute('UPDATE papers SET added_to_zotero = 1, zotero_key = ? WHERE id = ?',
+                     (zotero_key, paper_id))
         conn.commit()
 
 
