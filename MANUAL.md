@@ -156,35 +156,33 @@ With By category and By criteria file, also set **If nothing fits**: the collect
 
 ## 6. Writing a criteria file
 
-The **By criteria file** option uses this file. The default is `zotero_분류기준.md` in the app folder; you can point **Criteria file** in Settings to another file (a path relative to the app folder, or a full path). After you save the path, Settings shows a check of the file: how many collections have criteria, collections that no longer exist in Zotero, and Zotero collections not yet in the file.
+The **By criteria file** option uses this file. The default is `zotero_분류기준.md` in the app folder; you can point **Criteria file** in Settings to another file (a path relative to the app folder, or a full path). A ready-to-edit example is in [examples/zotero_criteria.example.md](examples/zotero_criteria.example.md).
+
+PaperAlert reads the file every time it sends a paper, so changes apply as soon as you save. No restart is needed.
 
 ### Format
 
-One collection per line. Indent subcollections by two spaces.
+One collection per line, written exactly as it is named in Zotero. Indent subcollections by two spaces under their parent. After the name, write a colon and the criterion: which papers belong there.
 
 ```
-- 02_Research [DZZ3MKZG] (0 items) {상위}: Classify into subcollections only.
-  - Shadow education [SBY7X89B] (193 items) {기준}: Studies whose main topic or keyword is private tutoring, shadow education, or cram schools
-  - Low fertility [F7IW6JF9] (254 items) {기준}: Studies whose main motivation is to explain low fertility
-    - Gender equality and fertility [JV87JUCL] (8 items) {기준}: Studies of the relationship between gender equality and fertility
-  - Statistical software [QHAE68IS] (36 items) {제외}: Folder for software materials.
+- 02_Research
+  - Shadow education: studies whose main topic is private tutoring, shadow education, or cram schools
+  - Low fertility: studies whose main motivation is to explain low fertility
+    - Gender equality and fertility: studies of the relationship between gender equality and fertility
+  - Statistical software
 ```
 
-- The text in `[square brackets]` is the Zotero collection key. **It is optional.** Without a key, PaperAlert finds the collection by its path (the names of the line and its parent lines, which must match Zotero exactly), or by its name if only one collection has that name. Add the key only when several collections share a name and the path is ambiguous. If a line has a key, do not change it.
-- The `(n items)` count is for reference only and may be omitted.
-- The text in `{braces}` is the status. The status words are in Korean:
+- **A line with a criterion** is a target: Claude puts papers there when the criterion fits.
+- **A line without a criterion** (just the name) is not a target. Use this for parent folders that only organize subcollections (like `02_Research` above) and for folders you do not want filled automatically (project, seminar, or software folders). You can also leave such folders out of the file entirely; writing parent folders helps PaperAlert find subcollections by their full path.
+- **Collection keys are not needed.** PaperAlert finds each collection in Zotero by its path (the line's name and the names of its parent lines). If several collections share the same name and the path does not tell them apart, or the name itself contains a colon, add the collection key in square brackets after the name, for example `- Korea [H3V6BLZE]: Korean studies of educational inequality`. You can find a collection's key in the address bar when you open it in the Zotero web library.
 
-| Status | Meaning | Used for classification |
-|---|---|---|
-| `{기준}`, `{기존}`, `{초안}` | Classify by the criterion after the colon (기준 = criterion, 기존 = existing, 초안 = draft) | Yes |
-| `{제외}`, `{제외 제안}` | Excluded from automatic classification, e.g., project, special-issue, or seminar folders (제외 = excluded, 제외 제안 = suggested for exclusion) | No |
-| `{상위}` | A parent folder: classify into its subcollections only (상위 = parent) | No |
+After saving, open **Settings** and look at the check under **Criteria file**. It shows how many collections have criteria, collections found by name, lines that could not be matched to a Zotero collection (in red), and Zotero collections not yet in the file.
 
 ### Tips for writing criteria
 
 - Be specific, for example "studies in which X is the dependent (or independent) variable" or "studies whose main topic or keyword is X".
 - A paper can go into several collections. Claude prefers the most specific subcollection and adds a parent only when the paper also fits the parent's own criterion.
-- When you create a new collection in Zotero, add a line for it under its parent, with the same name as in Zotero, for example `  - Text analysis {기준}: studies that use text analysis methods`. No key is needed. The check in Settings lists collections found by name, lines it could not match, and Zotero collections not yet in the file. Changes apply the next time a paper is sent; no restart is needed.
+- When you create a new collection in Zotero, add a line for it under its parent in this file.
 
 ---
 
@@ -239,6 +237,7 @@ Claude API usage is paid from credits in the Anthropic Console. These are rough 
 | Clicking ✓ In Zotero does not open Zotero | The Zotero desktop app must be installed. |
 | Batch progress stays for a long time | Batches can take up to 24 hours. Click the progress text to check now; hover over it to see the last check time and message. |
 | "File not found" in the criteria file check | Check the Criteria file path in Settings and click **Save**. |
+| "Not found in Zotero" in the criteria file check | The name or path on that line does not match Zotero. Check the spelling and the parent lines, or add the collection key in square brackets ([Section 6](#6-writing-a-criteria-file)). |
 
 ---
 

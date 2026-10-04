@@ -20,8 +20,8 @@ __pycache__/
 
 # 앱과 무관한 개인 자료
 2025-12 작업/
-Zotero*.txt
-Zotero*.md
+/Zotero*.txt
+/Zotero*.md
 character_maker.html
 *.jpg
 

@@ -20,9 +20,15 @@ import zotero_client
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_SECONDS = 600
-USABLE_STATES = {'기존', '기준', '초안'}     # 분류 대상으로 쓰는 상태
-# 컬렉션 키([ABCD1234])와 편수((n편) 또는 (n items))는 없어도 됨. 키가 없으면 경로로 Zotero에서 찾음
-LINE_RE = re.compile(r'^(\s*)- (.+?)(?: \[([A-Z0-9]{8})\])?(?: \(\d+[^)]*\))? \{([^}]+)\}:\s*(.*)$')
+# 예전 형식의 상태 표시 중 '분류 대상 아님'을 뜻하는 것. 표시가 없으면 기준 문장이 있는 줄만 분류 대상
+NOT_USED_MARKERS = {'제외', '제외 제안', '상위', 'exclude', 'excluded', 'parent', 'skip'}
+# 줄 형식: "- 컬렉션 이름: 기준"  (기준이 없는 "- 컬렉션 이름" 줄은 상위·제외 폴더로 보고 분류에 안 씀)
+# 이름 뒤의 [컬렉션 키], (n편), {상태 표시}는 모두 선택. 키는 같은 이름의 컬렉션이 여럿일 때만 필요
+ITEM_RE = re.compile(r'^(\s*)[-*]\s+(.+?)\s*$')
+# [키]나 {표시}가 있으면 그 앞까지가 이름 (이름에 콜론이 있어도 됨). 없으면 첫 ': ' 앞까지가 이름
+TAGGED_RE = re.compile(r'^(.*?)\s*(?:\[([A-Z0-9]{8})\])?\s*(?:\(\d+[^)]*\))?\s*\{([^}]*)\}\s*(?::\s*(.*))?$')
+KEYED_RE = re.compile(r'^(.*?)\s*\[([A-Z0-9]{8})\]\s*(?:\(\d+[^)]*\))?\s*()(?::\s*(.*))?$')
+PLAIN_RE = re.compile(r'^(.*?)()\s*(?:\(\d+[^)]*\))?()\s*(?::\s*(.*))?$')
 
 _collections_cache = {'at': 0.0, 'items': []}
 
@@ -71,18 +77,33 @@ def criteria_path(settings: dict | None = None) -> str:
 
 
 def parse_criteria(path: str) -> list[dict]:
-    """기준 파일의 컬렉션 줄을 읽음: [{key, name, path, state, text}]. 경로는 들여쓰기로 만든다."""
+    """기준 파일의 컬렉션 줄을 읽음: [{key, name, path, used, text}]. 경로는 들여쓰기로 만든다.
+
+    used: 기준 문장이 있고 '제외'·'상위' 같은 표시가 없으면 True (분류 대상).
+    """
     entries, stack = [], []
     with open(path, encoding='utf-8') as f:
-        for line in f:
-            m = LINE_RE.match(line.rstrip('\n'))
-            if not m:
-                continue
-            depth = len(m.group(1).expandtabs(2)) // 2
-            name = m.group(2)
-            stack = stack[:depth] + [name]
-            entries.append({'key': m.group(3), 'name': name, 'path': ' / '.join(stack),
-                            'state': m.group(4).strip(), 'text': m.group(5).strip()})
+        text = re.sub(r'<!--.*?-->', '', f.read(), flags=re.DOTALL)
+    in_code = False
+    for line in text.splitlines():
+        if line.strip().startswith('```'):
+            in_code = not in_code
+            continue
+        m = ITEM_RE.match(line)
+        if in_code or not m:
+            continue
+        item = m.group(2)
+        parts = TAGGED_RE.match(item) or KEYED_RE.match(item) or PLAIN_RE.match(item)
+        name = (parts.group(1) or '').strip()
+        if not name or name.startswith('`'):   # 설명용 목록(`{표시}` 등)은 컬렉션 줄이 아님
+            continue
+        depth = len(m.group(1).expandtabs(2)) // 2
+        stack = stack[:depth] + [name]
+        marker = (parts.group(3) or '').strip().lower()
+        criterion = (parts.group(4) or '').strip()
+        entries.append({'key': parts.group(2) or None, 'name': name, 'path': ' / '.join(stack),
+                        'used': bool(criterion) and marker not in NOT_USED_MARKERS,
+                        'text': criterion})
     return entries
 
 
@@ -120,11 +141,9 @@ def criteria_status(settings: dict | None = None) -> dict:
     entries = parse_criteria(path)
     if not entries:
         return {'ok': False, 'error': 'No collection lines found in the file.'}
-    counts = {}
-    for e in entries:
-        counts[e['state']] = counts.get(e['state'], 0) + 1
-    usable = sum(1 for e in entries if e['state'] in USABLE_STATES)
-    result = {'ok': True, 'path': path, 'entries': len(entries), 'usable': usable, 'counts': counts}
+    usable = sum(1 for e in entries if e['used'])
+    result = {'ok': True, 'path': path, 'entries': len(entries), 'usable': usable,
+              'not_used': len(entries) - usable}
     try:
         entries = resolve_keys(entries)
         zotero = {c['key']: c for c in list_collections()}
@@ -163,7 +182,7 @@ CLASSIFY_SCHEMA = {
 def classify_by_criteria(paper: dict, settings: dict | None = None) -> list[str]:
     """기준 파일을 보고 Claude가 고른 컬렉션 키 목록. 맞는 곳이 없으면 빈 목록."""
     entries = [e for e in resolve_keys(parse_criteria(criteria_path(settings)))
-               if e['state'] in USABLE_STATES and e['key']]
+               if e['used'] and e['key']]
     allowed = {e['key'] for e in entries}
     listing = '\n'.join(f"[{e['key']}] {e['path']}: {e['text']}" for e in entries)
     paper_text = '\n'.join(f'{label}: {paper.get(field)}' for label, field in [
