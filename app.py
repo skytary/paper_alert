@@ -195,6 +195,7 @@ def _process_emails_background():
             return
 
         saved_total = 0
+        skipped_total = 0
         processed_count = 0
         errors = []
 
@@ -228,10 +229,11 @@ def _process_emails_background():
                 email = gmail_client.get_email_content_by_id(email_id)
 
                 subj = email.get('subject', '(제목 없음)')[:60]
-                update_status(message=f'Claude 분석 중 ({i+1}/{total}): {subj}')
+                update_status(message=f'분석 중 ({i+1}/{total}): {subj}')
 
-                # Claude로 논문 추출
-                papers = paper_processor.process_email(email)
+                # 논문 목록 추출 → DOI·초록 보강 → 이미 있는 논문 건너뛰기 → 평가
+                papers, skipped = paper_processor.process_email(email)
+                skipped_total += skipped
 
                 # DB 저장
                 saved = 0
@@ -241,7 +243,7 @@ def _process_emails_background():
 
                 # 성공 후 읽음 처리 + 처리 완료 기록
                 gmail_client.mark_email_read(email_id)
-                database.mark_email_processed(email_id, len(papers))
+                database.mark_email_processed(email_id, len(papers) + skipped)
 
                 saved_total += saved
                 processed_count += 1
@@ -252,7 +254,8 @@ def _process_emails_background():
                 print(err_msg)
 
         update_status(
-            message=f'완료! {processed_count}개 이메일 처리, 논문 {saved_total}편 저장됨.',
+            message=f'완료! {processed_count}개 이메일 처리, 논문 {saved_total}편 저장 '
+                    f'(이미 있던 논문 {skipped_total}편은 건너뜀).',
             is_processing=False,
             errors=errors,
             last_run=_now(),
@@ -277,7 +280,7 @@ def _now() -> str:
 
 def _open_browser():
     time.sleep(1.5)
-    webbrowser.open('http://localhost:5000')
+    webbrowser.open('http://127.0.0.1:5000')
 
 
 if __name__ == '__main__':
@@ -298,7 +301,7 @@ if __name__ == '__main__':
     t = threading.Thread(target=_open_browser, daemon=True)
     t.start()
 
-    print("  http://localhost:5000 에서 실행 중")
+    print("  http://127.0.0.1:5000 에서 실행 중")
     print("  (종료: Ctrl+C)\n")
 
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)

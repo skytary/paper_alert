@@ -1,6 +1,13 @@
-"""PaperAlert 런처 — pywebview 앱 창 (콘솔 없음, PaperAlert 아이콘)"""
+"""PaperAlert 런처 — pywebview 앱 창 (콘솔 없음, PaperAlert 아이콘)
+
+바로가기는 venv의 Scripts\\pythonw.exe가 아니라 기반 파이썬의 pythonw.exe로
+이 파일을 실행한다(create_shortcut.py 참고). uv가 만든 venv의 pythonw.exe는
+콘솔용 실행 파일이라 터미널 창을 띄우기 때문이다. 대신 여기서 venv의
+site-packages를 직접 불러온다.
+"""
 import sys
 import os
+import site
 import threading
 import time
 
@@ -8,8 +15,44 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(APP_DIR)
 sys.path.insert(0, APP_DIR)
 
+# ── venv 패키지 불러오기 (기반 pythonw로 실행된 경우) ─────────────────── #
+_VENV_SITE = os.path.join(APP_DIR, '.venv', 'Lib', 'site-packages')
+if os.path.isdir(_VENV_SITE) and os.path.normcase(sys.prefix) != os.path.normcase(
+        os.path.join(APP_DIR, '.venv')):
+    site.addsitedir(_VENV_SITE)
+
+APP_ID = 'PaperAlert.App.1'   # create_shortcut.py의 바로가기 AppUserModelID와 같아야 함
+
+# ── 중복 실행 방지: 이미 떠 있으면 그 창을 앞으로 가져오고 끝냄 ───────── #
+try:
+    import ctypes
+    _k32 = ctypes.windll.kernel32
+    _mutex = _k32.CreateMutexW(None, False, 'Local\\PaperAlert.SingleInstance')
+    if _k32.GetLastError() == 183:            # ERROR_ALREADY_EXISTS
+        import ctypes.wintypes as _wt
+        _u32 = ctypes.windll.user32
+
+        def _raise_cb(hwnd, _):
+            # 트레이 아이콘의 숨은 창은 건너뛰고 pywebview(WinForms) 창만 고름
+            title = ctypes.create_unicode_buffer(64)
+            cls = ctypes.create_unicode_buffer(64)
+            _u32.GetWindowTextW(hwnd, title, 64)
+            _u32.GetClassNameW(hwnd, cls, 64)
+            if title.value == 'PaperAlert' and cls.value.startswith('WindowsForms'):
+                _u32.ShowWindow(hwnd, 9)      # SW_RESTORE
+                _u32.SetForegroundWindow(hwnd)
+                return False
+            return True
+
+        _u32.EnumWindows(ctypes.WINFUNCTYPE(_wt.BOOL, _wt.HWND, _wt.LPARAM)(_raise_cb), 0)
+        sys.exit(0)
+except SystemExit:
+    raise
+except Exception:
+    pass
+
 # ── stdout/stderr 완전 억제 ───────────────────────────────────────────── #
-# 콘솔 창 방지: None 여부와 무관하게 항상 devnull로 리다이렉션
+# pythonw에는 콘솔이 없어 print가 실패할 수 있으므로 devnull로 보낸다
 _devnull = open(os.devnull, 'w', encoding='utf-8')
 sys.stdout = _devnull
 sys.stderr = _devnull
@@ -28,52 +71,15 @@ def _popen_no_win(self, *a, **kw):
     _ORIG_POPEN(self, *a, **kw)
 _sp.Popen.__init__ = _popen_no_win
 
-# ── Windows: 콘솔 창 숨기기 ──────────────────────────────────────────────── #
-# 진단 결과: ShowWindow(SW_HIDE)는 작동함. FreeConsole 후에는 GetConsoleWindow=None
-# 이 되어 감시가 중단됨. 따라서 FreeConsole 없이 ShowWindow만으로 계속 숨김.
-# _pre 필터는 콘솔이 이미 떴을 때 "기존 창"으로 오분류하므로 사용 안 함.
-def _keep_console_hidden():
-    import ctypes, ctypes.wintypes
-    try:
-        k32 = ctypes.windll.kernel32
-        u32 = ctypes.windll.user32
-        k32.GetConsoleWindow.restype = ctypes.wintypes.HWND
-        WNDENUMPROC = ctypes.WINFUNCTYPE(
-            ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-
-        def _hide_cb(hwnd, _):
-            try:
-                buf = ctypes.create_unicode_buffer(32)
-                u32.GetClassNameW(hwnd, buf, 32)
-                if buf.value == 'ConsoleWindowClass' and u32.IsWindowVisible(hwnd):
-                    u32.ShowWindow(hwnd, 0)   # SW_HIDE
-            except Exception:
-                pass
-            return True
-
-        cb = WNDENUMPROC(_hide_cb)
-
-        for _ in range(600):          # 0.05초 × 600 = 30초간 감시
-            # ① GetConsoleWindow: 우리 프로세스 콘솔
-            hwnd = k32.GetConsoleWindow()
-            if hwnd and u32.IsWindowVisible(hwnd):
-                u32.ShowWindow(hwnd, 0)
-            # ② EnumWindows: 서브프로세스 콘솔도 포함
-            u32.EnumWindows(cb, 0)
-            time.sleep(0.05)
-    except Exception:
-        pass
-
-threading.Thread(target=_keep_console_hidden, daemon=True).start()
-
-# ── Windows: 작업표시줄 앱 ID (PaperAlert 아이콘으로 독립 그룹화) ─────── #
+# ── Windows: 작업표시줄 앱 ID ─────────────────────────────────────────── #
+# 바로가기(.lnk)에도 같은 ID를 넣어 두어야 바로가기와 앱 창이 한 아이콘으로 묶인다
 try:
     import ctypes
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('PaperAlert.App.1')
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
 except Exception:
     pass
 
-APP_URL  = 'http://localhost:5000'
+APP_URL  = 'http://127.0.0.1:5000'
 ICO_PATH = os.path.join(APP_DIR, 'icon.ico')
 
 
@@ -127,7 +133,8 @@ def _start_server():
 
         database.init_db()
         # Gmail 인증은 여기서 하지 않음 — "새 이메일 처리" 클릭 시 자동 처리
-        flask_app.app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+        # 127.0.0.1: 이 컴퓨터에서만 접속 가능 (같은 네트워크의 다른 기기 차단)
+        flask_app.app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)
     except Exception:
         import traceback
         with open(os.path.join(APP_DIR, 'launch_error.log'), 'w', encoding='utf-8') as f:
@@ -201,9 +208,17 @@ def _quit(icon, item):
 if not os.path.exists(ICO_PATH):
     _save_ico(ICO_PATH)
 
+from PIL import Image as _Image
+try:
+    _tray_img = _Image.open(ICO_PATH)
+    _tray_img.size = (64, 64)        # ICO에 든 여러 크기 중 64px을 고름
+    _tray_img = _tray_img.convert('RGBA')
+except Exception:
+    _tray_img = _make_icon_image(64)
+
 tray = pystray.Icon(
     name='PaperAlert',
-    icon=_make_icon_image(64),
+    icon=_tray_img,
     title='PaperAlert',
     menu=pystray.Menu(
         pystray.MenuItem('PaperAlert 열기', _show_window, default=True),

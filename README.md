@@ -34,11 +34,12 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 
 ## 실행
 
-- 데스크톱 창으로 실행: `.venv\Scripts\pythonw.exe launch.pyw` (또는 `launch.vbs` 더블클릭)
-- 바탕화면 바로가기 만들기: `.venv\Scripts\python.exe create_shortcut.py`
+- 바로가기 만들기: `.venv\Scripts\python.exe create_shortcut.py`. 앱 폴더(`PaperAlert.lnk`)와 시작 메뉴에 만들고, 작업표시줄에 고정한 바로가기가 있으면 같이 고칩니다. 작업표시줄 고정은 앱을 실행한 뒤 아이콘을 오른쪽 클릭해 "작업 표시줄에 고정"을 누릅니다. 이후로는 바로가기로 실행합니다.
+  - 바로가기는 venv의 `Scripts\pythonw.exe`가 아니라 기반 파이썬의 `pythonw.exe`를 실행합니다. uv로 만든 venv의 `pythonw.exe`는 콘솔용 실행 파일이라 터미널 창이 함께 뜨기 때문입니다. venv 패키지는 `launch.pyw`가 직접 불러옵니다.
+  - 바로가기와 앱 창에 같은 앱 ID(`PaperAlert.App.1`)가 붙어 있어 작업표시줄에서 한 아이콘으로 묶입니다. 이미 떠 있을 때 바로가기를 다시 누르면 기존 창이 앞으로 옵니다.
 - 브라우저로 실행: `.venv\Scripts\python.exe app.py` 후 http://localhost:5000
 
-처음 "새 이메일 처리"를 누르면 브라우저에서 Google 로그인 창이 뜨고, 승인하면 `token.json`이 생깁니다.
+처음 "새 이메일 처리"를 누르면 브라우저에서 Google 로그인 창이 뜨고, 승인하면 `token.json`이 생깁니다. 오래 쓰지 않아 인증이 만료됐을 때도 같은 로그인 창이 다시 뜹니다.
 
 ## 파일 구성
 
@@ -50,14 +51,14 @@ copy .env.example .env    # .env를 열어 API 키를 채웁니다
 | `database.py` | SQLite 저장·조회 |
 | `zotero_client.py` | Zotero Web API로 논문 추가 |
 | `templates/index.html` | 화면(단일 페이지) |
-| `launch.pyw`, `launch.vbs`, `tiny_launcher.pyw` | 콘솔 창 없이 pywebview 창으로 띄우는 런처 |
-| `create_shortcut.py` | 바탕화면 바로가기 생성 |
+| `launch.pyw` | pywebview 창과 트레이 아이콘으로 앱을 띄우는 런처 |
+| `create_shortcut.py` | 앱 폴더·시작 메뉴·작업표시줄 바로가기 생성 |
 
 ## 주의
 
 - `.env`, `credentials.json`, `token.json`, `papers.db`에는 개인 키와 자료가 들어가므로 `.gitignore`로 막아 두었습니다. 직접 커밋하지 마세요.
-- 서버가 `0.0.0.0:5000`으로 뜨기 때문에 같은 네트워크의 다른 기기에서도 접속할 수 있습니다. 혼자 쓰려면 `app.py`와 `launch.pyw`의 `host='0.0.0.0'`을 `host='127.0.0.1'`로 바꾸세요.
-- Claude 모델은 `paper_processor.py`의 `MODEL`에서 바꿀 수 있습니다.
+- 서버는 `127.0.0.1:5000`으로 떠서 이 컴퓨터에서만 접속할 수 있습니다. 같은 네트워크의 다른 기기에서 열려면 `app.py`와 `launch.pyw`의 `host`를 `'0.0.0.0'`으로 바꾸세요(인증이 없으니 공용 와이파이에서는 권하지 않습니다).
+- Claude 모델(`MODEL`, 기본 `claude-sonnet-5-5`)과 생각 깊이(`EFFORT`, 기본 `medium`)는 `paper_processor.py`에서 바꿀 수 있습니다. 응답 형식은 JSON 스키마(`OUTPUT_SCHEMA`)로 고정되고, 관심사 프롬프트는 캐싱됩니다.
 
 Claude Code로 만들었습니다(2026년 3~4월).
 

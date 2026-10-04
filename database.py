@@ -1,5 +1,7 @@
 """SQLite 데이터베이스 관리 모듈"""
+import re
 import sqlite3
+import unicodedata
 from datetime import datetime
 
 DB_PATH = 'papers.db'
@@ -85,25 +87,37 @@ def _migrate(conn):
             conn.execute(f"ALTER TABLE papers ADD COLUMN {col_name} {col_type}")
 
 
+def norm_title(title: str | None) -> str:
+    """중복 비교용 제목: 악센트·문장부호·따옴표 모양·띄어쓰기·대소문자 차이를 없앰.
+
+    곧은 따옴표(don't)와 둥근 따옴표(don’t)가 같게 나오도록 영숫자만 남기고 붙여 씀.
+    """
+    text = unicodedata.normalize('NFKD', title or '').encode('ascii', 'ignore').decode()
+    return re.sub(r'[^a-z0-9]+', '', text.lower())
+
+
+def existing_keys() -> tuple[set[str], set[str]]:
+    """DB에 있는 논문의 (DOI 집합, 정규화 제목 집합). DOI는 소문자."""
+    with get_connection() as conn:
+        rows = conn.execute('SELECT doi, title FROM papers').fetchall()
+    dois = {r[0].lower() for r in rows if r[0]}
+    titles = {norm_title(r[1]) for r in rows if r[1]}
+    return dois, titles
+
+
+def is_duplicate(paper: dict, keys: tuple[set[str], set[str]] | None = None) -> bool:
+    """DOI가 같거나 정규화 제목이 같은 논문이 이미 DB에 있으면 True."""
+    dois, titles = keys or existing_keys()
+    doi = (paper.get('doi') or '').strip().lower()
+    return bool(doi and doi in dois) or norm_title(paper.get('title')) in titles
+
+
 def save_paper(paper: dict) -> int | None:
-    """논문을 DB에 저장하고 ID를 반환. 중복이면 None 반환."""
-    title = paper.get('title', '').strip()
-    doi   = paper.get('doi', '').strip() if paper.get('doi') else ''
+    """논문을 DB에 저장하고 ID를 반환. 중복(DOI 또는 정규화 제목)이면 None 반환."""
+    if is_duplicate(paper):
+        return None  # 타 이메일 포함 전체 중복
 
     with get_connection() as conn:
-        # 제목(대소문자 무관) 또는 DOI 기준 중복 확인
-        if doi:
-            dup = conn.execute(
-                'SELECT id FROM papers WHERE doi = ? OR LOWER(title) = LOWER(?)',
-                (doi, title)
-            ).fetchone()
-        else:
-            dup = conn.execute(
-                'SELECT id FROM papers WHERE LOWER(title) = LOWER(?)',
-                (title,)
-            ).fetchone()
-        if dup:
-            return None  # 타 이메일 포함 전체 중복
 
         try:
             cursor = conn.execute('''

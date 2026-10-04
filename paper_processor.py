@@ -1,22 +1,23 @@
 """Claude API를 사용한 논문 정보 추출 및 관심도 평가 모듈"""
 import json
 import os
-import re
 import anthropic
 from datetime import datetime
 from dotenv import load_dotenv
 
+import database
+import enrich
+
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-5-5"
+EFFORT = "medium"        # 생각 깊이: low / medium / high. 높을수록 정확하지만 비용·시간 증가
+MAX_TOKENS = 64000       # 논문이 많은 메일도 응답이 잘리지 않도록 넉넉히 (스트리밍 필요)
 
 SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantitative sociologist whose main interests are social stratification, sociology of education, family demography, and quantitative research methods, and East Asia (particularly South Korea).
 
     [Task]
-    Extract academic papers from the email content below. For each paper, act as the user and assign a relevance score (1-5), based on your reading of the title and the abstract.
-
-    [CRITICAL EXCLUSION]
-    Do NOT extract "Book Reviews". Only extract research articles or substantive review articles.
+    You will receive a numbered list of papers (title, authors, journal, and the abstract when available), plus the original alert email for context. For EVERY paper in the list, act as the user and assign a relevance score (1-5) and write the summary fields, based on the title and the abstract. Return exactly one result per paper, using its number as 'index'. Never skip a paper: an irrelevant paper gets a low score (usually 1).
 
    [CORE RESEARCH INTERESTS — Heavy Positive Weight]
 
@@ -35,7 +36,7 @@ SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantit
     * Family background → achievement → labor outcomes
     * The consequences of higher education expansion (civic participations, family formation, health, parental well-being, etc.)
     ** Give high weights to South Korea **
-    * Consider non-advanced countries (Latin America, Asian countries other than East Asia, Africa, etc.) only with strong theoretical or methodological implications
+    * Non-advanced countries (Latin America, Asian countries other than East Asia, Africa, etc.): high scores only with strong theoretical or methodological implications
 
     **Methodological preferences (also heavily weighted):**
 
@@ -101,7 +102,7 @@ SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantit
     * Criminology (unless exceptional causal inference)
     * Pure qualitative/ethnographic research without topic or theory relevance
     * Historical/descriptive works without topic-match or theory-relevance
-    * Consider economics articles only with a clear and strong topic and methodological match
+    * Economics articles: score 1-2 unless there is a clear and strong topic and methodological match
 
     # [SCORING RUBRIC]
 
@@ -147,124 +148,201 @@ SYSTEM_PROMPT = """You are a research assistant for Dr. Seongsoo Choi, a quantit
     * No usable methods or conceptual contribution
 
     [OUTPUT REQUIREMENTS]
-    Return a VALID JSON object.
+    For each paper, fill in these fields (the response format is enforced by a JSON schema):
 
-    1. 'summary_kr': Objective & Finding (1 sentence, KOREAN).
-    2. 'method': Specific method (English preferred, e.g., "RDD", "RIF Regression", "Machine Learning").
-    3. 'field_data': Data/Context (KOREAN).
-    4. 'key_findings': **Write 2-3 detailed sentences in KOREAN.** Do NOT give a vague summary. Be specific about the direction of effects, specific groups affected, or key statistical results. (e.g., instead of "Education affects income", write "College education increases income by 10%, but this effect is stratified by parental background.")
-    5. 'relevance_category': Select ALL that apply as a JSON array (can be multiple):
+    1. 'index': the paper's number in the list.
+    2. 'score': integer 1-5 per the rubric above.
+    3. 'summary_kr': Objective & Finding (1 sentence, KOREAN).
+    4. 'method': Specific method as named in the abstract (English preferred, e.g., "RDD", "RIF Regression", "Two-way fixed effects with event study").
+    5. 'field_data': Data/Context (KOREAN). **Name the specific dataset(s) when the abstract names them** (e.g., "NLSY97", "PSID", "한국교육종단연구(KELS)", "덴마크 행정 등록자료"), together with the country/population and period. Avoid vague labels such as "미국, 종단 데이터" when the abstract gives more detail.
+    6. 'key_findings': **Write 2-3 detailed sentences in KOREAN.** Do NOT give a vague summary. Be specific about the direction of effects, specific groups affected, or key statistical results. (e.g., instead of "Education affects income", write "College education increases income by 10%, but this effect is stratified by parental background.")
+    7. 'relevance_category': Select ALL that apply (can be multiple):
       - "Core: Research"
       - "Method: Causal/Advanced"
       - "Class: Stratification"
       - "Class: Education"
       - "Class: Social Research Methods"
       - "General Interest"
-      Example: ["Core: Research", "Method: Causal/Advanced"]
 
-    [OUTPUT FORMAT]
-    Return ONLY a valid JSON object with no additional text.
-    If there are no papers in the email, return: {"papers": []}
+    [WHEN THE ABSTRACT IS MISSING]
+    If a paper has no abstract (neither in the list nor in the email), score it from the title, authors, and journal, but do not invent details. Write "초록 없음" for 'method', 'field_data', and 'key_findings', and base 'summary_kr' only on what the title states."""
 
-    {
-      "papers": [
-        {
-          "journal": "Name",
-          "title": "Title",
-          "authors": "Names",
-          "score": 1-5,
-          "summary_kr": "Summary",
-          "method": "Method",
-          "field_data": "Field & Data",
-          "key_findings": "Key Findings",
-          "relevance_category": ["Category1", "Category2"],
-          "link": "URL or null"
-        }
-      ]
-    }"""
+EXTRACT_PROMPT = """You extract the list of articles from an academic journal alert email (eTOC, OnlineFirst, Google Scholar alerts, etc.).
+
+Rules:
+* Do NOT extract book reviews. This is the only content type to skip.
+* Extract every other article, however irrelevant it seems. Do not judge relevance.
+* Copy 'title', 'authors', and 'journal' as shown in the email. Use null when absent.
+* 'link': the URL attached to the article (shown in <angle brackets> after the title, or nearby). Use null if absent.
+* 'year': the publication year only if the email states it. Use null otherwise; do not guess.
+* If the email contains no articles, return an empty 'papers' list."""
 
 
-def _extract_json(text: str) -> str:
-    """Claude 응답에서 JSON 부분만 추출."""
-    text = text.strip()
-    # 코드 블록 제거
-    if '```json' in text:
-        text = text.split('```json')[1].split('```')[0]
-    elif '```' in text:
-        text = text.split('```')[1].split('```')[0]
-    # {"papers": [...]} 객체 추출
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        return match.group(0).strip()
-    return text.strip()
+_NULLABLE_STR = {"type": ["string", "null"]}
+
+# 1단계 응답 형식: 메일에 실린 논문 목록
+EXTRACT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "papers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "authors": _NULLABLE_STR,
+                    "journal": _NULLABLE_STR,
+                    "year": {"type": ["integer", "null"]},
+                    "link": _NULLABLE_STR,
+                },
+                "required": ["title", "authors", "journal", "year", "link"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["papers"],
+    "additionalProperties": False,
+}
+
+# 2단계 응답 형식: 논문별 점수와 요약 (index로 목록과 짝지음)
+SCORE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "index": {"type": "integer"},
+                    "score": {"type": "integer", "enum": [1, 2, 3, 4, 5]},
+                    "summary_kr": {"type": "string"},
+                    "method": {"type": "string"},
+                    "field_data": {"type": "string"},
+                    "key_findings": {"type": "string"},
+                    "relevance_category": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["index", "score", "summary_kr", "method", "field_data",
+                             "key_findings", "relevance_category"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
+
+_client = None
 
 
-def process_email(email_content: dict) -> list[dict]:
-    """이메일에서 논문 정보를 추출하고 관심도를 평가. 논문 목록 반환."""
-    client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+def _get_client() -> anthropic.Anthropic:
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+    return _client
 
-    body = email_content.get('body', '')[:10000]
-    subject = email_content.get('subject', '')
 
-    prompt = f"""Extract all academic papers from the email below. Follow the instructions in the system prompt exactly.
+def _call(system: str, user: str, schema: dict, effort: str, label: str) -> dict:
+    """Claude를 한 번 호출해 스키마에 맞는 JSON을 돌려받음.
 
-Email Subject: {subject}
-
-Email Body:
-{body}"""
-
-    response = client.messages.create(
+    응답이 잘리거나(max_tokens) 거절되면 예외를 일으킨다. 호출하는 쪽은 그 메일을
+    처리 완료로 기록하지 않으므로 다음 실행 때 다시 시도된다.
+    """
+    with _get_client().messages.stream(
         model=MODEL,
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
+        max_tokens=MAX_TOKENS,
+        # 시스템 프롬프트 캐싱: 두 번째 호출부터 이 부분 비용이 약 1/10
+        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user}],
+        output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+        # 안전 분류기가 요청을 거절하면 서버가 다른 모델로 자동 재시도
+        extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
+        extra_body={"fallbacks": "default"},
+    ) as stream:
+        response = stream.get_final_message()
 
-    response_text = response.content[0].text
-    cleaned = _extract_json(response_text)
+    if response.stop_reason == 'max_tokens':
+        raise RuntimeError(f'응답이 길이 상한({MAX_TOKENS}토큰)에서 잘림: {label}')
+    if response.stop_reason == 'refusal':
+        raise RuntimeError(f'Claude가 처리를 거절함: {label}')
+    text = next((b.text for b in response.content if b.type == 'text'), '')
+    return json.loads(text)
 
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        print(f"JSON 파싱 실패 - 이메일: {subject}")
-        print(f"응답: {response_text[:500]}")
-        return []
 
-    # {"papers": [...]} 또는 직접 [...] 형식 모두 허용
-    if isinstance(parsed, dict):
-        papers = parsed.get('papers', [])
-    elif isinstance(parsed, list):
-        papers = parsed
-    else:
-        return []
+def extract_papers(email_content: dict) -> list[dict]:
+    """1단계: 메일에 실린 논문 목록(제목·저자·학술지·연도·링크)만 뽑음."""
+    subject = email_content.get('subject', '')
+    user = f"Email Subject: {subject}\n\nEmail Body:\n{email_content.get('body', '')}"
+    papers = _call(EXTRACT_PROMPT, user, EXTRACT_SCHEMA, 'low', subject[:60])['papers']
+    for p in papers:
+        p['title'] = (p.get('title') or '').strip()
+    return [p for p in papers if p['title']]
 
-    # 각 논문에 이메일 메타데이터 추가 + 필드명 정규화
+
+def score_papers(papers: list[dict], email_content: dict) -> list[dict]:
+    """2단계: 논문마다 점수·요약을 매김. 초록은 보강 단계에서 찾은 것을 붙여 보냄."""
+    lines = []
+    for i, p in enumerate(papers, 1):
+        lines.append(f"[{i}] Title: {p['title']}")
+        lines.append(f"    Authors: {p.get('authors') or 'unknown'}")
+        lines.append(f"    Journal: {p.get('journal') or 'unknown'}")
+        abstract = p.get('abstract') or '(not found in databases; use the email body if it has one)'
+        lines.append(f"    Abstract: {abstract}")
+    subject = email_content.get('subject', '')
+    user = ("Papers to score:\n\n" + "\n".join(lines)
+            + f"\n\n--- Original alert email (context) ---\nSubject: {subject}\n\n"
+            + email_content.get('body', ''))
+    results = _call(SYSTEM_PROMPT, user, SCORE_SCHEMA, EFFORT, subject[:60])['results']
+
+    by_index = {r['index']: r for r in results}
+    missing = [i for i in range(1, len(papers) + 1) if i not in by_index]
+    if missing:
+        raise RuntimeError(f'평가 결과가 빠진 논문 {len(missing)}편: {subject[:60]}')
+
+    scored = []
+    for i, p in enumerate(papers, 1):
+        r = by_index[i]
+        cats = [c.strip() for c in r['relevance_category'] if c.strip()]
+        scored.append({
+            **p,
+            'interest_score': r['score'],
+            'summary_kr': r['summary_kr'],
+            'method': r['method'],
+            'field_data': r['field_data'],
+            'key_findings': r['key_findings'],
+            'relevance_category': ', '.join(cats) or None,
+        })
+    return scored
+
+
+def process_email(email_content: dict, skip_existing: bool = True) -> tuple[list[dict], int]:
+    """메일 한 통 처리: 목록 뽑기 → DOI·초록 보강 → 이미 있는 논문 건너뛰기 → 평가.
+
+    반환값은 (저장할 논문 목록, 이미 DB에 있어 건너뛴 편수).
+    """
+    papers = [enrich.enrich(p) for p in extract_papers(email_content)]
+
+    skipped = 0
+    if skip_existing:
+        keys = database.existing_keys()
+        new = []
+        for p in papers:
+            if database.is_duplicate(p, keys):
+                skipped += 1
+                continue
+            # 같은 메일 안의 중복도 거름
+            keys[0].add((p.get('doi') or '').lower())
+            keys[1].add(database.norm_title(p['title']))
+            new.append(p)
+        papers = new
+
+    if not papers:
+        return [], skipped
+
+    scored = score_papers(papers, email_content)
     now = datetime.now().isoformat()
-    for paper in papers:
-        paper['email_id'] = email_content['id']
-        paper['email_subject'] = subject
-        paper['email_received_at'] = email_content.get('received_at', '')
-        paper['processed_at'] = now
-
-        # 새 스키마: score → interest_score (DB 호환)
-        if 'score' in paper and 'interest_score' not in paper:
-            paper['interest_score'] = paper.pop('score')
-
-        # 정제
-        if paper.get('title'):
-            paper['title'] = paper['title'].strip()
-        if paper.get('interest_score') is not None:
-            paper['interest_score'] = max(1, min(5, int(paper['interest_score'])))
-        # link가 "null" 문자열이면 None으로
-        if paper.get('link') in ('null', 'None', ''):
-            paper['link'] = None
-
-        # relevance_category: 리스트 → 콤마 구분 문자열
-        cat = paper.get('relevance_category')
-        if isinstance(cat, list):
-            paper['relevance_category'] = ', '.join([c.strip() for c in cat if c.strip()])
-        elif cat in ('null', 'None', '', None):
-            paper['relevance_category'] = None
-
-    # 제목 없는 항목 제거
-    return [p for p in papers if p.get('title')]
+    for p in scored:
+        p['email_id'] = email_content['id']
+        p['email_subject'] = email_content.get('subject', '')
+        p['email_received_at'] = email_content.get('received_at', '')
+        p['processed_at'] = now
+    return scored, skipped

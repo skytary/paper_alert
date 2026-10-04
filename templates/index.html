@@ -109,6 +109,8 @@
     }
     .btn-cancel:hover { background: #b91c1c; }
     .btn-cancel:disabled { background: #9ca3af; cursor: not-allowed; }
+    .btn-cancel.done { background: #16a34a; }
+    .btn-cancel.done:hover { background: #15803d; }
     .spinner {
       width: 16px; height: 16px;
       border: 2.5px solid rgba(255,255,255,.3);
@@ -705,7 +707,7 @@
       <div class="progress-fill" id="progress-fill" style="width:0%"></div>
     </div>
   </div>
-  <button class="btn-cancel" id="cancel-btn" onclick="cancelProcessing()">⏹ 취소</button>
+  <button class="btn-cancel" id="cancel-btn" onclick="onBannerButton()">⏹ 중지</button>
 </div>
 
 <!-- Error List -->
@@ -1243,14 +1245,31 @@ function debounceSearch() {
 }
 
 // ─── Process emails ────────────────────────────────────────────────────── //
+// 상태 배너 버튼: 처리 중에는 "중지", 끝나면 "완료"(누르면 배너 닫힘)
+function onBannerButton() {
+  const btn = document.getElementById('cancel-btn');
+  if (btn.classList.contains('done')) {
+    document.getElementById('status-banner').classList.add('hidden');
+  } else {
+    cancelProcessing();
+  }
+}
+
+function setBannerButton(done) {
+  const btn = document.getElementById('cancel-btn');
+  btn.disabled = false;
+  btn.classList.toggle('done', done);
+  btn.textContent = done ? '✓ 완료' : '⏹ 중지';
+}
+
 async function cancelProcessing() {
   const btn = document.getElementById('cancel-btn');
   btn.disabled = true;
-  btn.textContent = '취소 중...';
+  btn.textContent = '중지 중...';
   try {
     await fetch('/api/cancel', { method: 'POST' });
   } catch (e) {
-    console.error('취소 요청 실패:', e);
+    console.error('중지 요청 실패:', e);
   }
 }
 
@@ -1290,7 +1309,13 @@ async function checkStatus() {
     const fillEl  = document.getElementById('progress-fill');
     const btn     = document.getElementById('process-btn');
 
-    if (s.is_processing || s.message !== '대기 중') {
+    if (s.is_processing) {
+      if (!pollingTimer) startPolling();   // 처리 중에 화면을 새로 연 경우에도 진행 상황 갱신
+      spinner.style.display = '';
+      if (!document.getElementById('cancel-btn').textContent.startsWith('중지 중')) setBannerButton(false);
+    }
+
+    if (s.is_processing || (s.message !== '대기 중' && pollingTimer)) {
       banner.classList.remove('hidden');
       msgEl.textContent = s.message;
       const pct = s.total > 0 ? Math.round(s.current / s.total * 100) : (s.is_processing ? 20 : 100);
@@ -1304,9 +1329,7 @@ async function checkStatus() {
       btn.disabled = false;
       document.getElementById('process-btn-icon').textContent = '📥';
       spinner.style.display = 'none';
-      const cancelBtn = document.getElementById('cancel-btn');
-      cancelBtn.disabled = false;
-      cancelBtn.textContent = '⏹ 취소';
+      setBannerButton(true);
       if (s.last_run) document.getElementById('last-run').textContent = '마지막 처리: ' + s.last_run;
       if (s.errors && s.errors.length > 0) {
         document.getElementById('error-list').classList.add('visible');

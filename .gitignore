@@ -24,3 +24,9 @@ Zotero*.txt
 Zotero*.md
 character_maker.html
 *.jpg
+
+# 컴퓨터마다 경로가 다른 바로가기
+PaperAlert.lnk
+
+# DB 백업
+_backup/
